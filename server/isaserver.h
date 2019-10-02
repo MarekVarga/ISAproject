@@ -1,0 +1,15 @@
+//
+// Created by marek on 10/2/19.
+//
+
+#ifndef PROJECT_ISASERVER_H
+#define PROJECT_ISASERVER_H
+
+int EXIT_CODE_0 = 0;
+int EXIT_CODE_1 = 1;
+int RESPONSE_CODE_200 = 200;
+int RESPONSE_CODE_201 = 201;
+int RESPONSE_CODE_400 = 400;
+int RESPONSE_CODE_404 = 404;
+
+#endif //PROJECT_ISASERVER_H
