@@ -27,6 +27,7 @@ struct Boards {
 
 struct Board {
     char* name;
+    int isInitialized;
     struct BoardContent* content;
     struct Board* nextBoard;
 };
@@ -35,6 +36,12 @@ struct BoardContent {
     int id;
     char* content;
     struct BoardContent* nextContent;
+};
+
+struct HttpHeader {
+    char* method;
+    char* url;
+    char* host;
 };
 
 char* GET_BOARDS = "GET /boards";

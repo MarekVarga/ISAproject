@@ -256,6 +256,7 @@ int countChar(char* haystack, const char needle) {
  * @param name char* parsed name
  */
 void parseCommandForName(char* command, char* name) {
+    // todo check whether <command> has good format, e.g. board add <name>
     int numberOfSpaces = 0;
     char* tmpName = (char*) malloc(sizeof(char) * 1);
     tmpName[0] = '\0';
@@ -364,7 +365,7 @@ void putMethodAndUrlAndHostToHeader(char** header, char* method, char* url, char
     unsigned long methodLen = strlen(method);
     unsigned long urlLen = strlen(url);
     unsigned long hostnameLen = strlen(hostname);
-    char* host = malloc(sizeof(char) * (strlen("Host: ") + 1));
+    char* host = (char*) malloc(sizeof(char) * (strlen("Host: ") + 1));
     strcpy(host, "Host: ");
     unsigned long hostLen = strlen(host);
     unsigned long headerSize = methodLen + urlLen + strlen(PROTOCOL_VERSION) + hostnameLen + hostLen + 8; // space, \r, \n, \r, \n, \r, \n, \0

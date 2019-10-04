@@ -7,3 +7,6 @@ When debugging forked process in CLion:
 2. Start the program in the debugger.
 3. Go to the debugger console (tab with the label gdb) in clion and enter set follow-fork-mode child and set detach-on-fork off.
 4. Continue debugging.
+
+set follow-fork-mode child
+set detach-on-fork off

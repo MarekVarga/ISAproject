@@ -22,6 +22,26 @@ int checkArgs(int argc, char **argv);
 // function creates pointer to structure holding all Boards
 struct Boards* createBoards();
 
+// function correctly disposes structure holding all boards
+void deleteBoards(struct Boards* boards);
+
+// function creates pointer to structure representing a Board
+struct Board* createBoard(char* boardName);
+
+// function correctly disposes structure representing a Board
+void deleteBoard(struct Board* board);
+
+// function creates a pointer to structure holding board content
+struct BoardContent* createBoardContent(int id, char* content);
+
+// function correctly disposes structure holding board content
+void deleteBoardContent(struct BoardContent* boardContent);
+
+struct HttpHeader* createHttpHeader();
+
+// function correctly disposes HttpHeader structure
+void deleteHttpHeader(struct HttpHeader* httpHeader);
+
 // function tries to establish a server
 void establishConnection(int portNumber, int *socketDescriptor, struct sockaddr_in* serverAddress);
 
@@ -29,12 +49,23 @@ void establishConnection(int portNumber, int *socketDescriptor, struct sockaddr_
 void satisfyClient(const int* clientSocketDescriptor, struct Boards* boards);
 
 // function parses request
-int parseRequest(char* request, char** header, char** content);
+int parseRequest(char* request, struct HttpHeader *header, char** content);
 
 // function parses header
 int parseHeader(char* header, char** method, char** url);
 
-// funciton adds char to string
+// function process request by doing something with boards
+int processRequest(struct Boards* boards, struct HttpHeader* httpHeader, char* content);
+
+// function parses board name from url
+void parseBoardNameFromUrl(char* url, char** boardName, int boardNameLen, int offset);
+
+// function creates a board and adds it to the existing boards
+int createNewBoard(struct Boards *boards, char *boardName);
+
+int isBoardAlreadyCreated(struct Boards* boards, char* boardName);
+
+// function adds char to string
 void addCharToString(char** stringToBeAddedTo, char addedChar);
 
 int main(int argc, char* argv[]) {
@@ -160,6 +191,84 @@ struct Boards* createBoards() {
     return boards;
 }
 
+void deleteBoards(struct Boards* boards) {
+    if (boards != NULL) {
+        // todo
+        free(boards);
+    }
+}
+
+struct Board* createBoard(char* boardName) {
+    struct Board* board = malloc(sizeof(struct Board));
+    if (board == NULL) {
+        return NULL;
+    }
+
+    board->name = (char*) malloc(sizeof(char) * (strlen(boardName) + 1));
+    strcpy(board->name, boardName);
+    board->isInitialized = 1;
+    board->content = NULL;
+    board->nextBoard = NULL;
+
+    return board;
+}
+
+void deleteBoard(struct Board* board) {
+    if (board != NULL) {
+        // todo
+    }
+}
+
+/**
+ * Function creates structure that holds contents of HTTP header.
+ *
+ * @return pointer to structure HttpHeader or NULL if malloc was not successful
+ */
+struct HttpHeader* createHttpHeader() {
+    struct HttpHeader* header = malloc(sizeof(struct HttpHeader));
+    if (header == NULL) {
+        return NULL;
+    }
+
+    header->method = (char*) malloc(sizeof(char) * 1);
+    if (header->method == NULL) {
+        header->method = NULL;
+    } else {
+        header->method[0] = '\0';
+    }
+
+    header->url = (char*) malloc(sizeof(char) * 1);
+    if (header->url == NULL) {
+        header->url = NULL;
+    } else {
+        header->url[0] = '\0';
+    }
+
+    header->host = (char*) malloc(sizeof(char) * 1);
+    if (header->host == NULL) {
+        header->host = NULL;
+    } else {
+        header->host[0] = '\0';
+    }
+
+    return header;
+}
+
+/**
+ * Function disposes HttpHeader structure.
+ * First if deallocates all memory used for method, url and host.
+ *
+ * @param httpHeader struct HttpHeader* that will be disposed
+ */
+void deleteHttpHeader(struct HttpHeader* httpHeader) {
+    if (httpHeader != NULL) {
+        free(httpHeader->method);
+        free(httpHeader->url);
+        free(httpHeader->host);
+        free(httpHeader);
+    }
+}
+
 /**
  * Function makes process a server. Function calls these functions to do so: socket(), bind(), listen().
  *
@@ -226,6 +335,7 @@ void satisfyClient(const int* clientSocketDescriptor, struct Boards* boards) {
     char* content = (char*) malloc(sizeof(char) * 1);
     content[0] = '\0';
     int responseCode = RESPONSE_CODE_200;
+    struct HttpHeader* httpHeader = createHttpHeader();
 
     // read request from client
     if ( read(*clientSocketDescriptor,request, BUFSIZ) < 0) {
@@ -235,10 +345,15 @@ void satisfyClient(const int* clientSocketDescriptor, struct Boards* boards) {
     }
 
     // parse request
-    responseCode = parseRequest(request, &header, &content);
+    responseCode = parseRequest(request, httpHeader, &content);
     if (responseCode != RESPONSE_CODE_200) {
         // todo something went wrong during parsing
     }
+    responseCode = processRequest(boards, httpHeader, content);
+    if (responseCode != RESPONSE_CODE_200 || responseCode != RESPONSE_CODE_201) {
+        // todo something went wrong during parsing
+    }
+    fprintf(stdout, "response code: %d\n", responseCode);
 
     // check if communication is in set protocol
     /*if ( checkProtocol(request) != 0) {
@@ -339,6 +454,7 @@ void satisfyClient(const int* clientSocketDescriptor, struct Boards* boards) {
     }
     endpwent();*/
 
+    deleteHttpHeader(httpHeader);
     free(header);
     free(content);
 }
@@ -354,7 +470,7 @@ void satisfyClient(const int* clientSocketDescriptor, struct Boards* boards) {
  *
  * @return return code 200 if everything was OK otherwise 404 is returned of parsing error.
  */
-int parseRequest(char* request, char** header, char** content) {
+int parseRequest(char* request, struct HttpHeader *header, char** content) {
     char* method = (char*) malloc(sizeof(char) * 1);
     method[0] = '\0';
     char* url = (char*) malloc(sizeof(char) * 1);
@@ -380,8 +496,10 @@ int parseRequest(char* request, char** header, char** content) {
     fprintf(stderr, "Request header: %s\n", tmpHeader);
     parseResult = parseHeader(tmpHeader, &method, &url);
 
-    *header = realloc(*header, sizeof(char) * (strlen(tmpHeader) + 1));
-    strcpy(*header, tmpHeader);
+    header->method = realloc(header->method, sizeof(char) * (strlen(method) + 1));
+    strcpy(header->method, method);
+    header->url = realloc(header->url, sizeof(char) * (strlen(url) + 1));
+    strcpy(header->url, url);
 
     free(tmpHeader);
     free(method);
@@ -443,6 +561,123 @@ int parseHeader(char* header, char** method, char** url) {
     free(tmpProtocolVersion);
 
     return headerParsingResult;
+}
+
+int processRequest(struct Boards* boards, struct HttpHeader* httpHeader, char* content) {
+    int responseCode = RESPONSE_CODE_200;
+    char* boardName = (char*) malloc(sizeof(char) * 1);
+    boardName[0] = '\0';
+
+    if (strstr(httpHeader->url, "/boards") != NULL) {    // request for boards
+        if (strcmp(httpHeader->method, "GET") == 0) {
+            // todo
+        } else if (strcmp(httpHeader->method, "POST") == 0) {
+            int boardNameLen = strlen(httpHeader->url) - strlen("/boards/");
+            parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
+            responseCode = createNewBoard(boards, boardName);
+        } else if (strcmp(httpHeader->method, "DELETE") == 0) {
+            int boardNameLen = strlen(httpHeader->url) - strlen("/boards/");
+            parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
+        } else {
+            fprintf(stderr, "Invalid method for /boards manipulation");
+            responseCode = RESPONSE_CODE_404;
+        }
+    } else if (strstr(httpHeader->url, "/board")) {      // request for board
+        if (strcmp(httpHeader->method, "GET") == 0) {
+
+        } else if (strcmp(httpHeader->method, "POST") == 0) {
+
+        } else if (strcmp(httpHeader->method, "DELETE") == 0) {
+
+        } else if (strcmp(httpHeader->method, "PUT") == 0) {
+
+        } else {
+            fprintf(stderr, "Invalid method for /boards manipulation");
+            responseCode = RESPONSE_CODE_404;
+        }
+    } else {
+        fprintf(stderr, "Bad url");
+        responseCode = RESPONSE_CODE_404;
+    }
+
+    free(boardName);
+    return responseCode;
+}
+
+/**
+ * Function parses url to obtain board name. Board name is starting at offset position in url.
+ * (e.g. for url /boards/name offset should be 7)
+ *
+ * @param url char* url from HTTP request header
+ * @param boardName char** pointer to board name that will contain parsed name
+ * @param boardNameLen int length of board name
+ * @param offset int offset from which url prefix ends
+ */
+void parseBoardNameFromUrl(char* url, char** boardName, int boardNameLen, int offset) {
+    char* tmpBoardName = (char*) malloc(sizeof(char) * (boardNameLen + 1));
+    bzero(tmpBoardName, boardNameLen + 1);
+
+    // copy from url starting on offset position
+    strncpy(tmpBoardName, url+offset, boardNameLen);
+
+    *boardName = realloc(*boardName, sizeof(char) * (strlen(tmpBoardName) + 1));
+    strcpy(*boardName, tmpBoardName);
+
+    free(tmpBoardName);
+}
+
+/**
+ * Function creates a new board and appends it to the list of already existing boards.
+ * First it searches, whether a board already exits.
+ *
+ * @param boards structure Boards* holding point to the first board
+ * @param boardName char* name of the new board
+ *
+ * @return 201 on success, 409 when board already exits, 404 if some other error occurred
+ */
+int createNewBoard(struct Boards* boards, char* boardName) {
+    if (isBoardAlreadyCreated(boardName, boardName) == 1) {
+        return RESPONSE_CODE_409;
+    }
+
+    struct Board* newBoard = createBoard(boardName);
+    if (boardName == NULL) {
+        return RESPONSE_CODE_404;
+    }
+
+    struct Board* first = boards->board;
+    if (first == NULL) {
+        boards->board = newBoard;
+    } else {
+        while (first->nextBoard != NULL) {
+            first = first->nextBoard;
+        }
+
+        first->nextBoard = newBoard;
+    }
+
+    return RESPONSE_CODE_201;
+}
+
+/**
+ * Function checks whether a board with boardName already exists.
+ *
+ * @param boards struct Boards* structure of all boards
+ * @param boardName char* name of the board that is searched
+ * @return 0 if no such board exists, 1 is board already exists
+ */
+int isBoardAlreadyCreated(struct Boards* boards, char* boardName) {
+    int alreadyCreated = 0;
+    struct Board* board = boards->board;
+
+    while (board != NULL && board->isInitialized == 1) {
+        if (strcmp(board->name, boardName) == 0) {
+            return 1;
+        }
+        board = board->nextBoard;
+    }
+
+    return alreadyCreated;
 }
 
 /**
