@@ -11,20 +11,33 @@
 #include <pwd.h>
 
 #include "isaclient.h"
-
+//#include "api.h"
+#include "../api.h"
 
 // function checks and gets arguments
 void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** login);
 
-ApiService findApiService(char** command);
+void prepareHttpHeader(char* command, char* hostname, char* header);
 
 int countChar(char* haystack, const char needle);
+
+void parseCommandForName(char* command, char* name);
+
+void parseCommandForNameAndId(char* command, char* name, char* id);
+
+void concatNameAndId(char* name, char* id);
+
+void putMethodAndUrlAndHostToHeader(char* header, char* method, char* url, char* hostname);
+
+struct Api* newApi(char* command, char* apiEquivalent, int numberOfCommands);
+
+void deleteApi(struct Api* api);
 
 // function finds server and creates socket
 void findServer(char **hostname, const int *portNumber, struct hostent* server, struct sockaddr_in *serverAddress, int *clientSocket);
 
 // function connects to server, sends requests and prints responses
-void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, const int* n, const int* f, const int* l, char** login);
+void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, char** apiCommand, char** hostname);
 
 // function checks format of messages send through sockets
 int checkProtocol(char* message);
@@ -33,22 +46,24 @@ int main(int argc, char* argv[]) {
     int clientSocket = 0;
     int portNumber = 0;
     char* hostname = malloc(sizeof(strlen("") + 1));
+    hostname[0] = '\0';
     char* command = malloc(sizeof(strlen("") + 1));
+    command[0] = '\0';
+    char* httpHeader = malloc(sizeof(strlen("") + 1));
+    httpHeader[0] = '\0';
     struct hostent server;
     struct sockaddr_in serverAddress;
 
     // get arguments
     getArgs(argc, argv, &portNumber, &hostname, &command);
-    findApiService(&command);
+
+    prepareHttpHeader(command, hostname, httpHeader);
 
     // find server
     findServer(&hostname, &portNumber, &server, &serverAddress, &clientSocket);
 
-    int n = 0;
-    int f = 0;
-    int l = 0;
     // send request and get response
-    initiateCommunication(&clientSocket, serverAddress, &n, &f, &l, &command);
+    initiateCommunication(&clientSocket, serverAddress, &command, &hostname);
 
     exit(EXIT_CODE_0);
 }
@@ -69,7 +84,9 @@ void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** lo
     int arguments;
     opterr = 0;
     char* commandOption = malloc(sizeof(strlen("") + 1));
+    commandOption[0] = '\0';
     char* tmp = malloc(sizeof(strlen("") + 1));
+    tmp[0] = '\0';
 
     while ((arguments = getopt(argc, argv, "hH:p:")) != -1 ) {
         switch (arguments) {
@@ -141,35 +158,67 @@ void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** lo
  *
  * @return appropriate API
  */
-ApiService findApiService(char** command) {
+void prepareHttpHeader(char* command, char* hostname, char* header) {
     char space = ' ';
-    if (strstr(*command, "item update") != NULL) {
-        if (countChar(*command, space) == 3) {
+    char* name = malloc(sizeof(strlen("") + 1));
+    name[0] = '\0';
 
+    if (strstr(command, "item update") != NULL) {
+        if (countChar(command, space) == 3) {
+            char* id = malloc(sizeof(strlen("") + 1));
+            id[0] = '\0';
+            parseCommandForNameAndId(command, name, id);
+            concatNameAndId(name, id);
+            putMethodAndUrlAndHostToHeader(header, PUT_BOARD, name, hostname);
+            free(name);
+            return;
         }
-    } else if (strstr(*command, "item delete") != NULL) {
-        if (countChar(*command, space) == 3) {
-
+    } else if (strstr(command, "item delete") != NULL) {
+        if (countChar(command, space) == 3) {
+            char* id = malloc(sizeof(strlen("") + 1));
+            id[0] = '\0';
+            parseCommandForNameAndId(command, name, id);
+            concatNameAndId(name, id);
+            putMethodAndUrlAndHostToHeader(header, POST_BOARD, name, hostname);
+            free(name);
+            return;
         }
-    } else if (strstr(*command, "item add") != NULL) {
-        if (countChar(*command, space) == 3) {
-
+    } else if (strstr(command, "item add") != NULL) {
+        if (countChar(command, space) == 3) {
+            char* id = malloc(sizeof(strlen("") + 1));
+            id[0] = '\0';
+            parseCommandForNameAndId(command, name, id);
+            concatNameAndId(name, id);
+            putMethodAndUrlAndHostToHeader(header, POST_BOARD, name, hostname);
+            free(name);
+            return;
         }
-    } else if (strstr(*command, "boards list") != NULL) {
-        if (countChar(*command, space) == 2) {
-
+    } else if (strstr(command, "boards list") != NULL) {
+        if (countChar(command, space) == 2) {
+            parseCommandForName(command, name);
+            putMethodAndUrlAndHostToHeader(header, GET_BOARD, name, hostname);
+            free(name);
+            return;
         }
-    } else if (strstr(*command, "board delete") != NULL) {
-        if (countChar(*command, space) == 2) {
-
+    } else if (strstr(command, "board delete") != NULL) {
+        if (countChar(command, space) == 2) {
+            parseCommandForName(command, name);
+            putMethodAndUrlAndHostToHeader(header, DELETE_BOARDS, name, hostname);
+            free(name);
+            return;
         }
-    } else if (strstr(*command, "board add") != NULL) {
-        if (countChar(*command, space) == 2) {
-
+    } else if (strstr(command, "board add") != NULL) {
+        if (countChar(command, space) == 2) {
+            parseCommandForName(command, name);
+            putMethodAndUrlAndHostToHeader(header, POST_BOARDS, name, hostname);
+            free(name);
+            return;
         }
-    } else if (strstr(*command, "boards") != NULL) {
-        if (countChar(*command, space) == 0) {
-
+    } else if (strstr(command, "boards") != NULL) {
+        if (countChar(command, space) == 0) {
+            // todo
+            free(name);
+            return;
         }
     }
 
@@ -195,6 +244,143 @@ int countChar(char* haystack, const char needle) {
     }
 
     return occurrences;
+}
+
+void parseCommandForName(char* command, char* name) {
+    int numberOfSpaces = 0;
+    char* tmpName = malloc(sizeof(strlen("") + 1));
+    tmpName[0] = '\0';
+
+    for (int i = 0; i < strlen(command); i++) {
+        if (numberOfSpaces >= 2) {
+            // <name> part of command is located behind second space
+            if (command[i] != '\0') {
+                tmpName = realloc(tmpName, sizeof(strlen(name) + 2));
+                strcpy(tmpName, name);
+                tmpName[strlen(name)] = command[i];
+                tmpName[strlen(name)+1] = '\0';
+                name = realloc(name, sizeof(strlen(tmpName) + 1));
+                strcpy(name, tmpName);
+            }
+        } else{
+            // look for space characters
+            if (command[i] == ' ') {
+                numberOfSpaces++;
+            }
+        }
+    }
+
+    free(tmpName);
+}
+
+void parseCommandForNameAndId(char* command, char* name, char* id) {
+    int numberOfSpaces = 0;
+    char* tmpName = malloc(sizeof(strlen("") + 1));
+    tmpName[0] = '\0';
+    char* tmpId = malloc(sizeof(strlen("") + 1));
+    tmpId[0] = '\0';
+
+    for (int i = 0; i < strlen(command); i++) {
+        if (command[i] == ' ') {
+            numberOfSpaces++;
+            continue;
+        }
+        if (numberOfSpaces >= 3) {
+            // <id> part of command is located behind third space
+            if (command[i] != '\0') {
+                tmpId = realloc(tmpId, sizeof(strlen(id) + 2));
+                strcpy(tmpId, id);
+                tmpId[strlen(id)] = command[i];
+                tmpId[strlen(id) + 1] = '\0';
+                id = realloc(id, sizeof(strlen(tmpId) + 1));
+                strcpy(id, tmpId);
+            }
+        } else if (numberOfSpaces >= 2) {
+            // <name> part of command is located behind second space
+            if (command[i] != '\0') {
+                tmpName = realloc(tmpName, sizeof(strlen(name) + 2));
+                strcpy(tmpName, name);
+                tmpName[strlen(name)] = command[i];
+                tmpName[strlen(name) + 1] = '\0';
+                name = realloc(name, sizeof(strlen(tmpName) + 1));
+                strcpy(name, tmpName);
+            }
+        }
+    }
+
+    free(tmpName);
+}
+
+void concatNameAndId(char* name, char* id) {
+    char* tmp = malloc(sizeof(strlen(name) + strlen(id) + 2));
+    if (tmp == NULL) {
+        exit(EXIT_CODE_1);
+    }
+
+    strcpy(tmp, name);
+    tmp[strlen(name)] = '/';
+    strcat(tmp, id);
+
+    name = realloc(name, sizeof(strlen(tmp) + 1));
+    strcpy(name, tmp);
+    free(tmp);
+}
+
+void putMethodAndUrlAndHostToHeader(char* header, char* method, char* url, char* hostname) {
+    int methodLen = strlen(method);
+    int urlLen = strlen(url);
+    int hostnameLen = strlen(hostname);
+    char* host = "Host: ";
+    int hostLen = strlen(host);
+    int headerSize = methodLen + urlLen + strlen(PROTOCOL_VERSION) + hostnameLen + hostLen + 6; // space, \r, \n, \r, \n, \0
+
+    header = realloc(header, sizeof(headerSize));
+    bzero(header, headerSize);
+    if (header == NULL) {
+        exit(EXIT_CODE_1);
+    }
+
+    strcpy(header, method);
+    strcat(header, url);
+    header[methodLen + urlLen] = ' ';
+    strcat(header, PROTOCOL_VERSION);
+    strcat(header, "\r\n");
+    strcat(header, host);
+    strcat(header, hostname);
+    strcat(header, "\r\n");
+    header[headerSize] = '\0';
+
+    free(host);
+}
+
+struct Api* newApi(char* command, char* apiEquivalent, int numberOfCommands) {
+    struct Api* newApi = malloc(sizeof(struct Api));
+    if (newApi == NULL) {
+        return NULL;
+    }
+
+    newApi->commandArgument = malloc(sizeof(strlen(command) + 1));
+    if (newApi->commandArgument == NULL) {
+        return NULL;
+    }
+    strcpy(newApi->commandArgument, command);
+
+    newApi->apiEquivalent = malloc(sizeof(strlen(apiEquivalent) + 1));
+    if (newApi->apiEquivalent == NULL) {
+        return NULL;
+    }
+    strcpy(newApi->apiEquivalent, apiEquivalent);
+
+    newApi->numberOfCommands = numberOfCommands;
+    return newApi;
+}
+
+void deleteApi(struct Api* api) {
+    if (api != NULL) {
+        free(api->apiEquivalent);
+        free(api->commandArgument);
+        free(api);
+    }
 }
 
 /**
@@ -234,7 +420,7 @@ void findServer(char **hostname, const int *portNumber, struct hostent* server, 
  * @param l -l argument of program
  * @param login login of sought user
  */
-void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, const int* n, const int* f, const int* l, char** login){
+void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, char** apiCommand, char** hostname){
     ssize_t r = 0;
     char request[BUFSIZ];
     char response[BUFSIZ];
@@ -243,17 +429,18 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     bzero(request,BUFSIZ);
     bzero(response,BUFSIZ);
 
-// "
+    // "
     // connect to server
     if ( connect(*clientSocket,(struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) {
         fprintf(stderr, "Connecting to server resulted in error.\n");
         close(*clientSocket);
         exit(1);
     }
-// " inspired by: Rysavy Ondrej - DemoTcp/client.c
+    // " inspired by: Rysavy Ondrej - DemoTcp/client.c
 
     // prepare request for sending
-    strcpy(request,"**Protocol xvarga14**");
+
+    /*strcpy(request,"**Protocol xvarga14**");
     if ( *n != 0) {
         strcat(request, "n");
         strcat(request, *login);
@@ -266,7 +453,7 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
             strcat(request, *login);
         }
     }
-    strcat(request, "***");
+    strcat(request, "***");*/
 
     // send request to server
     if ( write(*clientSocket, request, strlen(request)) < 0) {
@@ -276,7 +463,7 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     }
 
     // if client was run with -n or -f argument
-    if ( *l == 0) {
+    /*if ( *l == 0) {
         // get response from server
         if (read(*clientSocket, response, BUFSIZ) < 0) {
             fprintf(stderr, "Reading from socket resulted in error.\n");
@@ -327,7 +514,7 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
             exit(1);
         }
 
-    }
+    }*/
 
     close(*clientSocket);
 }

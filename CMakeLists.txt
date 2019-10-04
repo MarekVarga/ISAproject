@@ -3,9 +3,9 @@ project(project)
 
 set(CMAKE_CXX_STANDARD 11)
 
-set(SERVER_SOURCE_FILES server/isaserver.c)
+set(SERVER_SOURCE_FILES server/isaserver.c api.h)
 
-set(CLIENT_SOURCE_FILES client/isaclient.c)
+set(CLIENT_SOURCE_FILES client/isaclient.c api.h)
 
 add_executable(client ${CLIENT_SOURCE_FILES})
 
