@@ -17,7 +17,7 @@
 // function checks and gets arguments
 void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** login);
 
-void prepareHttpHeader(char* command, char* hostname, char* header);
+void prepareHttpHeader(char* command, char* hostname, char** header);
 
 int countChar(char* haystack, const char needle);
 
@@ -27,7 +27,7 @@ void parseCommandForNameAndId(char* command, char* name, char* id);
 
 void concatNameAndId(char* name, char* id);
 
-void putMethodAndUrlAndHostToHeader(char* header, char* method, char* url, char* hostname);
+void putMethodAndUrlAndHostToHeader(char** header, char* method, char* url, char* hostname);
 
 struct Api* newApi(char* command, char* apiEquivalent, int numberOfCommands);
 
@@ -45,19 +45,15 @@ int checkProtocol(char* message);
 int main(int argc, char* argv[]) {
     int clientSocket = 0;
     int portNumber = 0;
-    char* hostname = malloc(sizeof(strlen("") + 1));
+    char* hostname = (char*) malloc(sizeof(char) * 1);
     hostname[0] = '\0';
-    char* command = malloc(sizeof(strlen("") + 1));
+    char* command = (char*) malloc(sizeof(char) * 1);
     command[0] = '\0';
-    char* httpHeader = malloc(sizeof(strlen("") + 1));
-    httpHeader[0] = '\0';
     struct hostent server;
     struct sockaddr_in serverAddress;
 
     // get arguments
     getArgs(argc, argv, &portNumber, &hostname, &command);
-
-    prepareHttpHeader(command, hostname, httpHeader);
 
     // find server
     findServer(&hostname, &portNumber, &server, &serverAddress, &clientSocket);
@@ -83,9 +79,9 @@ int main(int argc, char* argv[]) {
 void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** login) {
     int arguments;
     opterr = 0;
-    char* commandOption = malloc(sizeof(strlen("") + 1));
+    char* commandOption = (char*) malloc(sizeof(char) *1);
     commandOption[0] = '\0';
-    char* tmp = malloc(sizeof(strlen("") + 1));
+    char* tmp = (char*) malloc(sizeof(char) *1);
     tmp[0] = '\0';
 
     while ((arguments = getopt(argc, argv, "hH:p:")) != -1 ) {
@@ -98,7 +94,7 @@ void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** lo
                                 "item update <name> <id> <content> - PUT /board/<name>/<id>\nbe.g. ./isaclient -H localhost -p 1025 boards // this will send GET request to the server to obtain /boards");
                 exit(EXIT_CODE_1);
             case 'H':
-                *hostname = realloc(*hostname, sizeof(strlen(optarg) + 1));
+                *hostname = realloc(*hostname, sizeof(char) * (strlen(optarg) + 1));
                 strcpy(*hostname,optarg);
                 break;
             case 'p' :
@@ -130,20 +126,20 @@ void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** lo
 
     // find API commands
     // copy first command
-    commandOption = realloc(commandOption, sizeof(strlen(argv[optind]) + 1));
+    commandOption = realloc(commandOption, sizeof(char) * (strlen(argv[optind]) + 1));
     strcpy(commandOption, argv[optind]);
     // each addition command needs to be added with ' '
     int i = optind + 1;
     while (i < argc) {
-        tmp = realloc(tmp, sizeof(strlen(commandOption) + 1));
+        tmp = realloc(tmp, sizeof(char) * (strlen(commandOption) + 1));
         strcpy(tmp, commandOption);
-        commandOption = realloc(commandOption, sizeof(strlen(tmp) + strlen(" ") + strlen(argv[i]) + 1));
+        commandOption = realloc(commandOption, sizeof(char) * (strlen(tmp) + strlen(" ") + strlen(argv[i]) + 1));
         strcpy(commandOption, tmp);
         strcat(commandOption, " ");
         strcat(commandOption, argv[i]);
         i++;
     }
-    *login = realloc(*login, sizeof(strlen(commandOption) + 1));
+    *login = realloc(*login, sizeof(char) * (strlen(commandOption) + 1));
     strcpy(*login, commandOption);
 
     // free allocated helper variables
@@ -158,38 +154,41 @@ void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** lo
  *
  * @return appropriate API
  */
-void prepareHttpHeader(char* command, char* hostname, char* header) {
+void prepareHttpHeader(char* command, char* hostname, char** header) {
     char space = ' ';
-    char* name = malloc(sizeof(strlen("") + 1));
+    char* name = (char*) malloc(sizeof(char) * 1);
     name[0] = '\0';
 
     if (strstr(command, "item update") != NULL) {
         if (countChar(command, space) == 3) {
-            char* id = malloc(sizeof(strlen("") + 1));
+            char* id = (char*) malloc(sizeof(char) * 1);
             id[0] = '\0';
             parseCommandForNameAndId(command, name, id);
             concatNameAndId(name, id);
             putMethodAndUrlAndHostToHeader(header, PUT_BOARD, name, hostname);
+            free(id);
             free(name);
             return;
         }
     } else if (strstr(command, "item delete") != NULL) {
         if (countChar(command, space) == 3) {
-            char* id = malloc(sizeof(strlen("") + 1));
+            char* id = (char*) malloc(sizeof(char) * 1);
             id[0] = '\0';
             parseCommandForNameAndId(command, name, id);
             concatNameAndId(name, id);
             putMethodAndUrlAndHostToHeader(header, POST_BOARD, name, hostname);
+            free(id);
             free(name);
             return;
         }
     } else if (strstr(command, "item add") != NULL) {
         if (countChar(command, space) == 3) {
-            char* id = malloc(sizeof(strlen("") + 1));
+            char* id = (char*) malloc(sizeof(char) * 1);
             id[0] = '\0';
             parseCommandForNameAndId(command, name, id);
             concatNameAndId(name, id);
             putMethodAndUrlAndHostToHeader(header, POST_BOARD, name, hostname);
+            free(id);
             free(name);
             return;
         }
@@ -222,6 +221,7 @@ void prepareHttpHeader(char* command, char* hostname, char* header) {
         }
     }
 
+    free(name);
     fprintf(stderr, "Bad <command> argument; try running with \"-h\" argument for more info.\n");
     exit(EXIT_CODE_1);
 }
@@ -248,18 +248,18 @@ int countChar(char* haystack, const char needle) {
 
 void parseCommandForName(char* command, char* name) {
     int numberOfSpaces = 0;
-    char* tmpName = malloc(sizeof(strlen("") + 1));
+    char* tmpName = (char*) malloc(sizeof(char) * 1);
     tmpName[0] = '\0';
 
     for (int i = 0; i < strlen(command); i++) {
         if (numberOfSpaces >= 2) {
             // <name> part of command is located behind second space
             if (command[i] != '\0') {
-                tmpName = realloc(tmpName, sizeof(strlen(name) + 2));
+                tmpName = realloc(tmpName, sizeof(char) * (strlen(name) + 2));
                 strcpy(tmpName, name);
                 tmpName[strlen(name)] = command[i];
                 tmpName[strlen(name)+1] = '\0';
-                name = realloc(name, sizeof(strlen(tmpName) + 1));
+                name = realloc(name, sizeof(char) * (strlen(tmpName) + 1));
                 strcpy(name, tmpName);
             }
         } else{
@@ -275,9 +275,9 @@ void parseCommandForName(char* command, char* name) {
 
 void parseCommandForNameAndId(char* command, char* name, char* id) {
     int numberOfSpaces = 0;
-    char* tmpName = malloc(sizeof(strlen("") + 1));
+    char* tmpName = (char*) malloc(sizeof(char) * 1);
     tmpName[0] = '\0';
-    char* tmpId = malloc(sizeof(strlen("") + 1));
+    char* tmpId = (char*) malloc(sizeof(char) * 1);
     tmpId[0] = '\0';
 
     for (int i = 0; i < strlen(command); i++) {
@@ -288,31 +288,33 @@ void parseCommandForNameAndId(char* command, char* name, char* id) {
         if (numberOfSpaces >= 3) {
             // <id> part of command is located behind third space
             if (command[i] != '\0') {
-                tmpId = realloc(tmpId, sizeof(strlen(id) + 2));
+                tmpId = realloc(tmpId, sizeof(char) * (strlen(id) + 2));
                 strcpy(tmpId, id);
                 tmpId[strlen(id)] = command[i];
                 tmpId[strlen(id) + 1] = '\0';
-                id = realloc(id, sizeof(strlen(tmpId) + 1));
+                id = realloc(id, sizeof(char) * (strlen(tmpId) + 1));
                 strcpy(id, tmpId);
             }
         } else if (numberOfSpaces >= 2) {
             // <name> part of command is located behind second space
             if (command[i] != '\0') {
-                tmpName = realloc(tmpName, sizeof(strlen(name) + 2));
+                tmpName = realloc(tmpName, sizeof(char) * (strlen(name) + 2));
                 strcpy(tmpName, name);
                 tmpName[strlen(name)] = command[i];
                 tmpName[strlen(name) + 1] = '\0';
-                name = realloc(name, sizeof(strlen(tmpName) + 1));
+                name = realloc(name, sizeof(char) * (strlen(tmpName) + 1));
                 strcpy(name, tmpName);
             }
         }
     }
 
+    free(tmpId);
     free(tmpName);
 }
 
 void concatNameAndId(char* name, char* id) {
-    char* tmp = malloc(sizeof(strlen(name) + strlen(id) + 2));
+    size_t two = 2;
+    char* tmp = malloc(sizeof(char) * (strlen(name) + strlen(id) + two));
     if (tmp == NULL) {
         exit(EXIT_CODE_1);
     }
@@ -321,35 +323,40 @@ void concatNameAndId(char* name, char* id) {
     tmp[strlen(name)] = '/';
     strcat(tmp, id);
 
-    name = realloc(name, sizeof(strlen(tmp) + 1));
+    name = realloc(name, sizeof(char) * (strlen(tmp) + 1));
     strcpy(name, tmp);
     free(tmp);
 }
 
-void putMethodAndUrlAndHostToHeader(char* header, char* method, char* url, char* hostname) {
-    int methodLen = strlen(method);
-    int urlLen = strlen(url);
-    int hostnameLen = strlen(hostname);
-    char* host = "Host: ";
-    int hostLen = strlen(host);
-    int headerSize = methodLen + urlLen + strlen(PROTOCOL_VERSION) + hostnameLen + hostLen + 6; // space, \r, \n, \r, \n, \0
+void putMethodAndUrlAndHostToHeader(char** header, char* method, char* url, char* hostname) {
+    unsigned long methodLen = strlen(method);
+    unsigned long urlLen = strlen(url);
+    unsigned long hostnameLen = strlen(hostname);
+    char* host = malloc(sizeof(char) * (strlen("Host: ") + 1));
+    strcpy(host, "Host: ");
+    unsigned long hostLen = strlen(host);
+    unsigned long headerSize = methodLen + urlLen + strlen(PROTOCOL_VERSION) + hostnameLen + hostLen + 6; // space, \r, \n, \r, \n, \0
 
-    header = realloc(header, sizeof(headerSize));
-    bzero(header, headerSize);
-    if (header == NULL) {
+    char* tmpHeader = (char*) malloc(sizeof(char) * (headerSize));
+    bzero(tmpHeader, headerSize);
+    if (tmpHeader == NULL) {
         exit(EXIT_CODE_1);
     }
 
-    strcpy(header, method);
-    strcat(header, url);
-    header[methodLen + urlLen] = ' ';
-    strcat(header, PROTOCOL_VERSION);
-    strcat(header, "\r\n");
-    strcat(header, host);
-    strcat(header, hostname);
-    strcat(header, "\r\n");
-    header[headerSize] = '\0';
+    strcpy(tmpHeader, method);
+    strcat(tmpHeader, url);
+    tmpHeader[methodLen + urlLen] = ' ';
+    strcat(tmpHeader, PROTOCOL_VERSION);
+    strcat(tmpHeader, "\r\n");
+    strcat(tmpHeader, host);
+    strcat(tmpHeader, hostname);
+    strcat(tmpHeader, "\r\n");
+    tmpHeader[headerSize] = '\0';
 
+    *header = realloc(*header, sizeof(char) * (strlen(tmpHeader) + 1));
+    strcpy(*header, tmpHeader);
+
+    free(tmpHeader);
     free(host);
 }
 
@@ -359,13 +366,13 @@ struct Api* newApi(char* command, char* apiEquivalent, int numberOfCommands) {
         return NULL;
     }
 
-    newApi->commandArgument = malloc(sizeof(strlen(command) + 1));
+    newApi->commandArgument = malloc(sizeof(char) * (strlen(command) + 1));
     if (newApi->commandArgument == NULL) {
         return NULL;
     }
     strcpy(newApi->commandArgument, command);
 
-    newApi->apiEquivalent = malloc(sizeof(strlen(apiEquivalent) + 1));
+    newApi->apiEquivalent = malloc(sizeof(char) * (strlen(apiEquivalent) + 1));
     if (newApi->apiEquivalent == NULL) {
         return NULL;
     }
@@ -421,6 +428,10 @@ void findServer(char **hostname, const int *portNumber, struct hostent* server, 
  * @param login login of sought user
  */
 void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, char** apiCommand, char** hostname){
+    char* httpHeader = (char*) malloc(sizeof(char) * 1);
+    httpHeader[0] = '\0';
+    prepareHttpHeader(*apiCommand, *hostname, &httpHeader);
+
     ssize_t r = 0;
     char request[BUFSIZ];
     char response[BUFSIZ];
@@ -428,6 +439,7 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     bzero(message,BUFSIZ);
     bzero(request,BUFSIZ);
     bzero(response,BUFSIZ);
+
 
     // "
     // connect to server
@@ -439,21 +451,7 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     // " inspired by: Rysavy Ondrej - DemoTcp/client.c
 
     // prepare request for sending
-
-    /*strcpy(request,"**Protocol xvarga14**");
-    if ( *n != 0) {
-        strcat(request, "n");
-        strcat(request, *login);
-    } else if ( *f != 0 ) {
-        strcat(request, "f");
-        strcat(request, *login);
-    } else if ( *l != 0 ) {
-        strcat(request, "l");
-        if ( *login != NULL ) {
-            strcat(request, *login);
-        }
-    }
-    strcat(request, "***");*/
+    strcpy(request, httpHeader);
 
     // send request to server
     if ( write(*clientSocket, request, strlen(request)) < 0) {

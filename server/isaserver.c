@@ -97,7 +97,7 @@ int checkArgs(int argc, char **argv) {
     while ((arguments = getopt(argc, argv, "hp:")) != -1) {
         switch (arguments) {
             case 'h' :
-                fprintf(stdout, "Server part for ISA project; try to run with \"-p portnumber\" arguments\ne.g. ./isaserver -p 1025");
+                fprintf(stdout, "Server part for ISA project; try to run with \"-p portnumber\" arguments\ne.g. ./isaserver -p 1025\n");
                 exit(EXIT_CODE_1);
             case 'p' :
                 port = (int)  strtoll(optarg, &optarg, 10);
@@ -200,16 +200,17 @@ void satisfyClient(const int* clientSocketDescriptor) {
         close(*clientSocketDescriptor);
         exit(EXIT_CODE_1);
     }
+    fprintf(stdout, "successfully read from client");
 
     // check if communication is in set protocol
-    if ( checkProtocol(request) != 0) {
+    /*if ( checkProtocol(request) != 0) {
         fprintf(stderr, "Communication is in unknown protocol.\n");
         close(*clientSocketDescriptor);
         exit(EXIT_CODE_1);
-    }
+    }*/
 
     // find which option client wants
-    size_t pos = strstr(request, "***") - request;
+    /*size_t pos = strstr(request, "***") - request;
     memcpy(&requestOption, &request[21], 1);
     memcpy(&login, &request[22], pos-22);
 
@@ -298,7 +299,7 @@ void satisfyClient(const int* clientSocketDescriptor) {
             exit(EXIT_CODE_1);
         }
     }
-    endpwent();
+    endpwent();*/
 }
 
 /**

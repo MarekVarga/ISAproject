@@ -7,6 +7,10 @@ set(SERVER_SOURCE_FILES server/isaserver.c api.h)
 
 set(CLIENT_SOURCE_FILES client/isaclient.c api.h)
 
+set(TEST_SOURCE_FILES test.c)
+
 add_executable(client ${CLIENT_SOURCE_FILES})
 
 add_executable(server ${SERVER_SOURCE_FILES})
+
+add_executable(test ${TEST_SOURCE_FILES})
