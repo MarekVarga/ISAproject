@@ -17,16 +17,22 @@
 // function checks and gets arguments
 void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** login);
 
+// function prepares http request header
 void prepareHttpHeader(char* command, char* hostname, char** header);
 
-int countChar(char* haystack, const char needle);
+// function counts occurrences of char in char*
+int countChar(char* haystack, char needle);
 
+// funciton parses <comman> for name
 void parseCommandForName(char* command, char* name);
 
+// funciton parses <command> to name and id
 void parseCommandForNameAndId(char* command, char* name, char* id);
 
+// function concatenates name and id for api
 void concatNameAndId(char* name, char* id);
 
+// function puts method, url, protocol and host to header
 void putMethodAndUrlAndHostToHeader(char** header, char* method, char* url, char* hostname);
 
 struct Api* newApi(char* command, char* apiEquivalent, int numberOfCommands);
@@ -38,9 +44,6 @@ void findServer(char **hostname, const int *portNumber, struct hostent* server, 
 
 // function connects to server, sends requests and prints responses
 void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, char** apiCommand, char** hostname);
-
-// function checks format of messages send through sockets
-int checkProtocol(char* message);
 
 int main(int argc, char* argv[]) {
     int clientSocket = 0;
@@ -150,9 +153,9 @@ void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** lo
 /**
  * Function tries to find appropriate API service for command arguments or it results in error if no API matches the commands.
  *
- * @param command
- *
- * @return appropriate API
+ * @param command char* <ommand> that will be parsed and then incluced in header
+ * @param hostname char* server hostname
+ * @param header char** pointer to char* representing HTTP header that will be prepared
  */
 void prepareHttpHeader(char* command, char* hostname, char** header) {
     char space = ' ';
@@ -246,6 +249,12 @@ int countChar(char* haystack, const char needle) {
     return occurrences;
 }
 
+/**
+ * Function parses <command> for name.
+ *
+ * @param command char* <command> parsed
+ * @param name char* parsed name
+ */
 void parseCommandForName(char* command, char* name) {
     int numberOfSpaces = 0;
     char* tmpName = (char*) malloc(sizeof(char) * 1);
@@ -273,6 +282,13 @@ void parseCommandForName(char* command, char* name) {
     free(tmpName);
 }
 
+/**
+ * Function parses <command> for name and id.
+ *
+ * @param command char* <command> that is parsed
+ * @param name char* parsed name
+ * @param id char* parsed id
+ */
 void parseCommandForNameAndId(char* command, char* name, char* id) {
     int numberOfSpaces = 0;
     char* tmpName = (char*) malloc(sizeof(char) * 1);
@@ -312,6 +328,14 @@ void parseCommandForNameAndId(char* command, char* name, char* id) {
     free(tmpName);
 }
 
+/**
+ * Function concatenates name and id obtained from <command>.
+ * In concatenation, '/' needs to inserted in between them.
+ * The result is then stored in name parameter.
+ *
+ * @param name char* name obtained from <command>
+ * @param id char* id obtained from <command>
+ */
 void concatNameAndId(char* name, char* id) {
     size_t two = 2;
     char* tmp = malloc(sizeof(char) * (strlen(name) + strlen(id) + two));
@@ -328,6 +352,14 @@ void concatNameAndId(char* name, char* id) {
     free(tmp);
 }
 
+/**
+ * Function pusts request method, board addres(url), protocol version and hostname to HTTP header.
+ *
+ * @param header char** pointer to header that will be build
+ * @param method char* HTTP request header method
+ * @param url char* HTTP request header url
+ * @param hostname char* HTTP request header hostname
+ */
 void putMethodAndUrlAndHostToHeader(char** header, char* method, char* url, char* hostname) {
     unsigned long methodLen = strlen(method);
     unsigned long urlLen = strlen(url);
@@ -335,7 +367,7 @@ void putMethodAndUrlAndHostToHeader(char** header, char* method, char* url, char
     char* host = malloc(sizeof(char) * (strlen("Host: ") + 1));
     strcpy(host, "Host: ");
     unsigned long hostLen = strlen(host);
-    unsigned long headerSize = methodLen + urlLen + strlen(PROTOCOL_VERSION) + hostnameLen + hostLen + 6; // space, \r, \n, \r, \n, \0
+    unsigned long headerSize = methodLen + urlLen + strlen(PROTOCOL_VERSION) + hostnameLen + hostLen + 8; // space, \r, \n, \r, \n, \r, \n, \0
 
     char* tmpHeader = (char*) malloc(sizeof(char) * (headerSize));
     bzero(tmpHeader, headerSize);
@@ -350,7 +382,7 @@ void putMethodAndUrlAndHostToHeader(char** header, char* method, char* url, char
     strcat(tmpHeader, "\r\n");
     strcat(tmpHeader, host);
     strcat(tmpHeader, hostname);
-    strcat(tmpHeader, "\r\n");
+    strcat(tmpHeader, "\r\n\r\n");
     tmpHeader[headerSize] = '\0';
 
     *header = realloc(*header, sizeof(char) * (strlen(tmpHeader) + 1));
@@ -515,26 +547,4 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     }*/
 
     close(*clientSocket);
-}
-
-/**
- * Function checks if message format meets the protocol criteria.
- *
- * @param message message to be checked
- * @return 0 if message is OK otherwise return 1
- */
-int checkProtocol(char* message) {
-
-    char protocolEnding[4];
-    bzero(protocolEnding, 4);
-    memcpy(&protocolEnding,strstr(message,"***"),strlen("***")+1);
-    char protocolOpening[21];
-    bzero(protocolOpening, 21);
-    memmove(&protocolOpening,message,21);
-
-    if ( strcmp(protocolOpening,"**Protocol xvarga14**") != 0 && strcmp(protocolEnding, "***") != 0 ) {
-        return 1;
-    }
-
-    return 0;
 }

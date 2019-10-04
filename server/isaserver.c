@@ -19,17 +19,32 @@ int socketDescriptor;
 // function checks and gets arguments
 int checkArgs(int argc, char **argv);
 
+// function creates pointer to structure holding all Boards
+struct Boards* createBoards();
+
 // function tries to establish a server
 void establishConnection(int portNumber, int *socketDescriptor, struct sockaddr_in* serverAddress);
 
 // function communicates with client
-void satisfyClient(const int* clientSocketDescriptor);
+void satisfyClient(const int* clientSocketDescriptor, struct Boards* boards);
 
-int checkProtocol(char *message);
+// function parses request
+int parseRequest(char* request, char** header, char** content);
+
+// function parses header
+int parseHeader(char* header, char** method, char** url);
+
+// funciton adds char to string
+void addCharToString(char** stringToBeAddedTo, char addedChar);
 
 int main(int argc, char* argv[]) {
     int port, clientSocketDescriptor, pid;
     struct sockaddr_in serverAddress, clientAddress;
+    struct Boards* boards = createBoards();
+    if (boards == NULL) {
+        fprintf(stderr, "Unable to create initial empty boards");
+        exit(1);
+    }
 
     // get arguments
     port = checkArgs(argc, argv);
@@ -67,7 +82,7 @@ int main(int argc, char* argv[]) {
             // "
             close(socketDescriptor);
             // " inspired by: Rysavy Ondrej - DemoFork/server.c
-            satisfyClient(&clientSocketDescriptor);
+            satisfyClient(&clientSocketDescriptor, boards);
             // todo close socket
             exit(EXIT_CODE_0);
         } else {
@@ -130,6 +145,22 @@ int checkArgs(int argc, char **argv) {
 }
 
 /**
+ * Function creates structure that holds all Boards.
+ *
+ * @return pointer to structure Boards or NULL if malloc was not successful
+ */
+struct Boards* createBoards() {
+    struct Boards* boards = malloc(sizeof(struct Boards));
+    if (boards == NULL) {
+        return NULL;
+    }
+
+    boards->board = NULL;
+
+    return boards;
+}
+
+/**
  * Function makes process a server. Function calls these functions to do so: socket(), bind(), listen().
  *
  * @param portNumber port number
@@ -177,22 +208,24 @@ void establishConnection(int portNumber, int* socketDescriptor, struct sockaddr_
  * Function receives request from client, checks if request message matches required protocol then tries to meet client's request and sends response.
  *
  * @param clientSocketDescriptor socket descriptor of client
+ * @param boards struct Boards* pointer to all Boards
  */
-void satisfyClient(const int* clientSocketDescriptor) {
-
-    int found = 0;
+void satisfyClient(const int* clientSocketDescriptor, struct Boards* boards) {
     char request[BUFSIZ];
-    char requestOption = '\0';
     char login[BUFSIZ];
     char response[BUFSIZ];
     char confirmationMessage[BUFSIZ];
     char tmp[BUFSIZ];
-    struct passwd* user;
     bzero(request,BUFSIZ);
     bzero(login, BUFSIZ);
     bzero(response, BUFSIZ);
     bzero(confirmationMessage, BUFSIZ);
     bzero(tmp, BUFSIZ);
+    char* header = (char*) malloc(sizeof(char) * 1);
+    header[0] = '\0';
+    char* content = (char*) malloc(sizeof(char) * 1);
+    content[0] = '\0';
+    int responseCode = RESPONSE_CODE_200;
 
     // read request from client
     if ( read(*clientSocketDescriptor,request, BUFSIZ) < 0) {
@@ -200,7 +233,12 @@ void satisfyClient(const int* clientSocketDescriptor) {
         close(*clientSocketDescriptor);
         exit(EXIT_CODE_1);
     }
-    fprintf(stdout, "successfully read from client");
+
+    // parse request
+    responseCode = parseRequest(request, &header, &content);
+    if (responseCode != RESPONSE_CODE_200) {
+        // todo something went wrong during parsing
+    }
 
     // check if communication is in set protocol
     /*if ( checkProtocol(request) != 0) {
@@ -300,27 +338,131 @@ void satisfyClient(const int* clientSocketDescriptor) {
         }
     }
     endpwent();*/
+
+    free(header);
+    free(content);
 }
 
 /**
- * Function checks if message format meets the protocol criteria.
+ * Function parses HTTP request.
+ * First it parses header and prints it on stderr.
+ * Then it parses content.
  *
- * @param message message to be checked
+ * @param request char* received request
+ * @param header char** pointer to string of header that was obtained after parsing
+ * @param content char** pointer to string of content that was obtained after parsing
  *
- * @return 0 if message is OK otherwise return 1
+ * @return return code 200 if everything was OK otherwise 404 is returned of parsing error.
  */
-int checkProtocol(char* message) {
+int parseRequest(char* request, char** header, char** content) {
+    char* method = (char*) malloc(sizeof(char) * 1);
+    method[0] = '\0';
+    char* url = (char*) malloc(sizeof(char) * 1);
+    url[0] = '\0';
+    int parseResult = RESPONSE_CODE_200;
 
-    char protocolEnding[4];
-    bzero(protocolEnding, 4);
-    memcpy(&protocolEnding,strstr(message,"***"),strlen("***")+1);
-    char protocolOpening[21];
-    bzero(protocolOpening, 21);
-    memmove(&protocolOpening,message,21);
-
-    if ( strcmp(protocolOpening,"**Protocol xvarga14**") != 0 && strcmp(protocolEnding, "***") != 0 ) {
-        return 1;
+    char* headerEnd = strstr(request, "\r\n\r\n");
+    if (headerEnd == NULL) {
+        fprintf(stderr, "Request is badly formatted");
+        return RESPONSE_CODE_404;
     }
 
-    return 0;
+    int headerLen = strlen(request) - strlen(headerEnd);
+    char* tmpHeader = (char*) malloc(sizeof(char) * (headerLen + 3)); // \r, \n, \0
+    bzero(tmpHeader, headerLen + 3);
+    for (int i = 0; i < headerLen; i++) {
+        tmpHeader[i] = request[i];
+    }
+    tmpHeader[headerLen] = '\r';
+    tmpHeader[headerLen+1] = '\n';
+    tmpHeader[headerLen+2] = '\0';
+    // print header to stderr
+    fprintf(stderr, "Request header: %s\n", tmpHeader);
+    parseResult = parseHeader(tmpHeader, &method, &url);
+
+    *header = realloc(*header, sizeof(char) * (strlen(tmpHeader) + 1));
+    strcpy(*header, tmpHeader);
+
+    free(tmpHeader);
+    free(method);
+    free(url);
+
+    return parseResult;
+}
+
+/**
+ * Function parses header of HTTP request.
+ *
+ * @param header char* received HTTP header
+ * @param method char** pointer to string specifying requested method
+ * @param url char** pointer to string specifying requested board
+ *
+ * @return response code 200 if everything was OK, otherwise 404 is returned
+ */
+int parseHeader(char* header, char** method, char** url) {
+    char* tmpMethod = (char*) malloc(sizeof(char) * 1);
+    tmpMethod[0] = '\0';
+    char* tmpUrl = (char*) malloc(sizeof(char) * 1);
+    tmpUrl[0] = '\0';
+    char* tmpProtocolVersion = (char*) malloc(sizeof(char) * 1);
+    tmpProtocolVersion[0] = '\0';
+    int numberOfSpaces = 0;
+    int headerParsingResult = RESPONSE_CODE_200;
+
+    for (int i = 0; i < strlen(header); i++) {
+        if (header[i] == ' ' || (header[i] == '\r' && (i+1 < strlen(header)) && header[i+1] == '\n')) {
+            numberOfSpaces++;
+            continue;
+        }
+
+        if (numberOfSpaces == 0) {          // Method
+            addCharToString(&tmpMethod, header[i]);
+        } else if (numberOfSpaces == 1) {   // URL
+            addCharToString(&tmpUrl, header[i]);
+        } else if (numberOfSpaces == 2) {   // Protocol version
+            addCharToString(&tmpProtocolVersion, header[i]);
+        }
+    }
+
+    /*fprintf(stdout, "Method: %s\n", tmpMethod);
+    fprintf(stdout, "Url: %s\n", tmpUrl);
+    fprintf(stdout, "Protocol version: %s\n", tmpProtocolVersion);*/
+
+    *method = realloc(*method, sizeof(char) * (strlen(tmpMethod) + 1));
+    strcpy(*method, tmpMethod);
+    *url = realloc(*url, sizeof(char) * (strlen(tmpUrl) + 1));
+    strcpy(*url, tmpUrl);
+
+    if (strcmp(tmpProtocolVersion, PROTOCOL_VERSION) != 0) {
+        fprintf(stderr, "Bad protocol version; provided=%s\n required=%s\n", tmpProtocolVersion, PROTOCOL_VERSION);
+        headerParsingResult = RESPONSE_CODE_404;
+    }
+
+    free(tmpMethod);
+    free(tmpUrl);
+    free(tmpProtocolVersion);
+
+    return headerParsingResult;
+}
+
+/**
+ * Function adds character to string. It reallocates string so that concatenation is possible.
+ *
+ * @param stringToBeAddedTo char** pointer to string that will be concatenated with new char
+ * @param addedChar char that will be added to the string
+ */
+void addCharToString(char** stringToBeAddedTo, char addedChar) {
+    char* tmp = (char*) malloc(sizeof(char) * (strlen(*stringToBeAddedTo) + 1));
+    strcpy(tmp, *stringToBeAddedTo);
+    tmp[strlen(*stringToBeAddedTo)] = '\0';
+
+    char* tmp2 = (char*) malloc(sizeof(char) * (strlen(tmp) + 2));
+    strcpy(tmp2, tmp);
+    tmp2[strlen(tmp)] = addedChar;
+    tmp2[strlen(tmp)+1] = '\0';
+    free(tmp);
+
+    *stringToBeAddedTo = realloc(*stringToBeAddedTo, sizeof(char) * (strlen(tmp2) + 1));
+    strcpy(*stringToBeAddedTo, tmp2);
+    free(tmp2);
 }

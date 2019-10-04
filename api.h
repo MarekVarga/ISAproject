@@ -21,6 +21,22 @@ struct Api {
     int numberOfCommands;
 };
 
+struct Boards {
+    struct Board* board;
+};
+
+struct Board {
+    char* name;
+    struct BoardContent* content;
+    struct Board* nextBoard;
+};
+
+struct BoardContent {
+    int id;
+    char* content;
+    struct BoardContent* nextContent;
+};
+
 char* GET_BOARDS = "GET /boards";
 char* POST_BOARDS = "POST /boards/";
 char* DELETE_BOARDS = "DELETE /boards/";
