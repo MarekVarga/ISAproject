@@ -24,10 +24,10 @@ void prepareHttpHeader(char* command, char* hostname, char** header);
 int countChar(char* haystack, char needle);
 
 // funciton parses <comman> for name
-void parseCommandForName(char* command, char* name);
+void parseCommandForName(char* command, char **name);
 
 // funciton parses <command> to name and id
-void parseCommandForNameAndId(char* command, char* name, char* id);
+void parseCommandForNameAndId(char* command, char **name, char **id);
 
 // function concatenates name and id for api
 void concatNameAndId(char* name, char* id);
@@ -64,6 +64,8 @@ int main(int argc, char* argv[]) {
     // send request and get response
     initiateCommunication(&clientSocket, serverAddress, &command, &hostname);
 
+    free(hostname);
+    free(command);
     exit(EXIT_CODE_0);
 }
 
@@ -166,7 +168,7 @@ void prepareHttpHeader(char* command, char* hostname, char** header) {
         if (countChar(command, space) == 3) {
             char* id = (char*) malloc(sizeof(char) * 1);
             id[0] = '\0';
-            parseCommandForNameAndId(command, name, id);
+            parseCommandForNameAndId(command, &name, &id);
             concatNameAndId(name, id);
             putMethodAndUrlAndHostToHeader(header, PUT_BOARD, name, hostname);
             free(id);
@@ -177,7 +179,7 @@ void prepareHttpHeader(char* command, char* hostname, char** header) {
         if (countChar(command, space) == 3) {
             char* id = (char*) malloc(sizeof(char) * 1);
             id[0] = '\0';
-            parseCommandForNameAndId(command, name, id);
+            parseCommandForNameAndId(command, &name, &id);
             concatNameAndId(name, id);
             putMethodAndUrlAndHostToHeader(header, POST_BOARD, name, hostname);
             free(id);
@@ -188,7 +190,7 @@ void prepareHttpHeader(char* command, char* hostname, char** header) {
         if (countChar(command, space) == 3) {
             char* id = (char*) malloc(sizeof(char) * 1);
             id[0] = '\0';
-            parseCommandForNameAndId(command, name, id);
+            parseCommandForNameAndId(command, &name, &id);
             concatNameAndId(name, id);
             putMethodAndUrlAndHostToHeader(header, POST_BOARD, name, hostname);
             free(id);
@@ -197,21 +199,21 @@ void prepareHttpHeader(char* command, char* hostname, char** header) {
         }
     } else if (strstr(command, "boards list") != NULL) {
         if (countChar(command, space) == 2) {
-            parseCommandForName(command, name);
+            parseCommandForName(command, &name);
             putMethodAndUrlAndHostToHeader(header, GET_BOARD, name, hostname);
             free(name);
             return;
         }
     } else if (strstr(command, "board delete") != NULL) {
         if (countChar(command, space) == 2) {
-            parseCommandForName(command, name);
+            parseCommandForName(command, &name);
             putMethodAndUrlAndHostToHeader(header, DELETE_BOARDS, name, hostname);
             free(name);
             return;
         }
     } else if (strstr(command, "board add") != NULL) {
         if (countChar(command, space) == 2) {
-            parseCommandForName(command, name);
+            parseCommandForName(command, &name);
             putMethodAndUrlAndHostToHeader(header, POST_BOARDS, name, hostname);
             free(name);
             return;
@@ -255,22 +257,24 @@ int countChar(char* haystack, const char needle) {
  * @param command char* <command> parsed
  * @param name char* parsed name
  */
-void parseCommandForName(char* command, char* name) {
+void parseCommandForName(char* command, char** name) {
     // todo check whether <command> has good format, e.g. board add <name>
     int numberOfSpaces = 0;
-    char* tmpName = (char*) malloc(sizeof(char) * 1);
-    tmpName[0] = '\0';
+    char* tmpName = (char*) malloc(sizeof(char) * (strlen(*name) + 1));
+    strcpy(tmpName, *name);
+    char* tmp = (char*) malloc(sizeof(char) * 1);
+    tmp[0] = '\0';
 
     for (int i = 0; i < strlen(command); i++) {
         if (numberOfSpaces >= 2) {
             // <name> part of command is located behind second space
             if (command[i] != '\0') {
-                tmpName = realloc(tmpName, sizeof(char) * (strlen(name) + 2));
-                strcpy(tmpName, name);
-                tmpName[strlen(name)] = command[i];
-                tmpName[strlen(name)+1] = '\0';
-                name = realloc(name, sizeof(char) * (strlen(tmpName) + 1));
-                strcpy(name, tmpName);
+                tmp = realloc(tmp, sizeof(char) * (strlen(tmpName) + 2));
+                strcpy(tmp, tmpName);
+                tmp[strlen(tmpName)] = command[i];
+                tmp[strlen(tmpName)+1] = '\0';
+                tmpName = realloc(tmpName, sizeof(char) * (strlen(tmp) + 1));
+                strcpy(tmpName, tmp);
             }
         } else{
             // look for space characters
@@ -280,6 +284,10 @@ void parseCommandForName(char* command, char* name) {
         }
     }
 
+    *name = realloc(*name, sizeof(char) * (strlen(tmpName) + 1));
+    strcpy(*name, tmpName);
+
+    free(tmp);
     free(tmpName);
 }
 
@@ -290,12 +298,14 @@ void parseCommandForName(char* command, char* name) {
  * @param name char* parsed name
  * @param id char* parsed id
  */
-void parseCommandForNameAndId(char* command, char* name, char* id) {
+void parseCommandForNameAndId(char* command, char **name, char **id) {
     int numberOfSpaces = 0;
-    char* tmpName = (char*) malloc(sizeof(char) * 1);
-    tmpName[0] = '\0';
-    char* tmpId = (char*) malloc(sizeof(char) * 1);
-    tmpId[0] = '\0';
+    char* tmpName = (char*) malloc(sizeof(char) * (strlen(*name) + 1));
+    strcpy(tmpName, *name);
+    char* tmpId = (char*) malloc(sizeof(char) * (strlen(*id) + 1));
+    strcpy(tmpId, *id);
+    char* tmp = (char*)  malloc(sizeof(char) * 1);
+    tmp[0] = '\0';
 
     for (int i = 0; i < strlen(command); i++) {
         if (command[i] == ' ') {
@@ -305,26 +315,32 @@ void parseCommandForNameAndId(char* command, char* name, char* id) {
         if (numberOfSpaces >= 3) {
             // <id> part of command is located behind third space
             if (command[i] != '\0') {
-                tmpId = realloc(tmpId, sizeof(char) * (strlen(id) + 2));
-                strcpy(tmpId, id);
-                tmpId[strlen(id)] = command[i];
-                tmpId[strlen(id) + 1] = '\0';
-                id = realloc(id, sizeof(char) * (strlen(tmpId) + 1));
-                strcpy(id, tmpId);
+                tmp = realloc(tmp, sizeof(char) * (strlen(tmpId) + 2));
+                strcpy(tmp, tmpId);
+                tmp[strlen(tmpId)] = command[i];
+                tmp[strlen(tmpId)+1] = '\0';
+                tmpId = realloc(tmpId, sizeof(char) * (strlen(tmp) + 1));
+                strcpy(tmpId, tmp);
             }
         } else if (numberOfSpaces >= 2) {
             // <name> part of command is located behind second space
             if (command[i] != '\0') {
-                tmpName = realloc(tmpName, sizeof(char) * (strlen(name) + 2));
-                strcpy(tmpName, name);
-                tmpName[strlen(name)] = command[i];
-                tmpName[strlen(name) + 1] = '\0';
-                name = realloc(name, sizeof(char) * (strlen(tmpName) + 1));
-                strcpy(name, tmpName);
+                tmp = realloc(tmp, sizeof(char) * (strlen(tmpName) + 2));
+                strcpy(tmp, tmpName);
+                tmp[strlen(tmpName)] = command[i];
+                tmp[strlen(tmpName)+1] = '\0';
+                tmpName = realloc(tmpName, sizeof(char) * (strlen(tmp) + 1));
+                strcpy(tmpName, tmp);
             }
         }
     }
 
+    *name = realloc(*name, sizeof(char) * (strlen(tmpName) + 1));
+    strcpy(*name, tmpName);
+    *id = realloc(*id, sizeof(char) * (strlen(tmpId) + 1));
+    strcpy(*id, tmpId);
+
+    free(tmp);
     free(tmpId);
     free(tmpName);
 }
@@ -370,7 +386,7 @@ void putMethodAndUrlAndHostToHeader(char** header, char* method, char* url, char
     unsigned long hostLen = strlen(host);
     unsigned long headerSize = methodLen + urlLen + strlen(PROTOCOL_VERSION) + hostnameLen + hostLen + 8; // space, \r, \n, \r, \n, \r, \n, \0
 
-    char* tmpHeader = (char*) malloc(sizeof(char) * (headerSize));
+    char* tmpHeader = (char*) malloc(sizeof(char) * (headerSize + 1));
     bzero(tmpHeader, headerSize);
     if (tmpHeader == NULL) {
         exit(EXIT_CODE_1);
@@ -547,5 +563,6 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
 
     }*/
 
+    free(httpHeader);
     close(*clientSocket);
 }
