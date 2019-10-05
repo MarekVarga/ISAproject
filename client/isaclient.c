@@ -44,9 +44,6 @@ void createRequestWithoutBody(char** httpRequest, char* method, char* url, char*
 // function creates HTTP request with body
 void createRequestWithBody(char** httpRequest, char* method, char* url, char* hostname, char* content);
 
-// function appends content to HTTP request
-void putContentToRequest(char** httpRequest, char* content);
-
 struct Api* newApi(char* command, char* apiEquivalent, int numberOfCommands);
 
 void deleteApi(struct Api* api);
@@ -176,7 +173,7 @@ void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
     char* name = (char*) malloc(sizeof(char) * 1);
     name[0] = '\0';
 
-    if (strstr(command, "item update") != NULL) {
+    if (strstr(command, "item update") != NULL) {   // PUT /board
         if (countChar(command, space) >= 3) {
             char* id = (char*) malloc(sizeof(char) * 1);
             id[0] = '\0';
@@ -191,7 +188,7 @@ void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
             free(name);
             return;
         }
-    } else if (strstr(command, "item delete") != NULL) {
+    } else if (strstr(command, "item delete") != NULL) {    // DELETE /board
         if (countChar(command, space) == 3) {
             char* id = (char*) malloc(sizeof(char) * 1);
             id[0] = '\0';
@@ -202,7 +199,7 @@ void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
             free(name);
             return;
         }
-    } else if (strstr(command, "item add") != NULL) {
+    } else if (strstr(command, "item add") != NULL) {       // POST /board
         if (countChar(command, space) >= 3) {
             char* content = (char*) malloc(sizeof(char) * 1);
             content[0] = '\0';
@@ -213,30 +210,30 @@ void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
             free(name);
             return;
         }
-    } else if (strstr(command, "boards list") != NULL) {
+    } else if (strstr(command, "boards list") != NULL) {    // GET /board
         if (countChar(command, space) == 2) {
             parseCommandForName(command, &name);
             createRequestWithoutBody(httpRequest, GET_BOARD, name, hostname);
             free(name);
             return;
         }
-    } else if (strstr(command, "board delete") != NULL) {
+    } else if (strstr(command, "board delete") != NULL) {   // DELETE /boards
         if (countChar(command, space) == 2) {
             parseCommandForName(command, &name);
             createRequestWithoutBody(httpRequest, DELETE_BOARDS, name, hostname);
             free(name);
             return;
         }
-    } else if (strstr(command, "board add") != NULL) {
+    } else if (strstr(command, "board add") != NULL) {      // POST /boards
         if (countChar(command, space) == 2) {
             parseCommandForName(command, &name);
             createRequestWithoutBody(httpRequest, POST_BOARDS, name, hostname);
             free(name);
             return;
         }
-    } else if (strstr(command, "boards") != NULL) {
+    } else if (strstr(command, "boards") != NULL) {         // GET /boards
         if (countChar(command, space) == 0) {
-            // todo
+            createRequestWithoutBody(httpRequest, GET_BOARDS, "", hostname);
             free(name);
             return;
         }
@@ -308,7 +305,7 @@ void parseCommandForName(char* command, char** name) {
 }
 
 /**
- * Function parses <command> for name and id.
+ * Function parses <command> from argument for name and id.
  *
  * @param command char* <command> that is parsed
  * @param name char* parsed name
@@ -363,6 +360,14 @@ void parseCommandForNameAndId(char* command, char **name, char **id) {
     free(tmpName);
 }
 
+/**
+ * Function parses <command> from argument for name, id and content
+ *
+ * @param command char* <command> that is parsed
+ * @param name char* parsed name
+ * @param id char* parsed id
+ * @param content char* parsed content
+ */
 void parseCommandForNameAndIdAndContent(char* command, char **name, char **id, char** content) {
     int numberOfSpaces = 0;
     char* tmpName = (char*) malloc(sizeof(char) * (strlen(*name) + 1));
@@ -427,6 +432,13 @@ void parseCommandForNameAndIdAndContent(char* command, char **name, char **id, c
     free(tmpName);
 }
 
+/**
+ * Function parses <command> from argument for name and content.
+ *
+ * @param command char* <command> that is parsed
+ * @param name char* parsed name
+ * @param content char* parsed content
+ */
 void parseCommandForNameAndContent(char* command, char** name, char** content) {
     int numberOfSpaces = 0;
     char* tmpName = (char*) malloc(sizeof(char) * (strlen(*name) + 1));
@@ -619,10 +631,6 @@ struct Api* newApi(char* command, char* apiEquivalent, int numberOfCommands) {
 
     newApi->numberOfCommands = numberOfCommands;
     return newApi;
-}
-
-void putContentToRequest(char** httpRequest, char* content) {
-
 }
 
 void deleteApi(struct Api* api) {
