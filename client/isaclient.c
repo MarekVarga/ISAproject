@@ -181,7 +181,7 @@ void prepareHttpHeader(char* command, char* hostname, char** header) {
             id[0] = '\0';
             parseCommandForNameAndId(command, &name, &id);
             concatNameAndId(name, id);
-            putMethodAndUrlAndHostToHeader(header, POST_BOARD, name, hostname);
+            putMethodAndUrlAndHostToHeader(header, DELETE_BOARD, name, hostname);
             free(id);
             free(name);
             return;
