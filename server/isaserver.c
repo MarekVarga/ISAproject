@@ -47,7 +47,7 @@ void deleteHttpHeader(struct HttpHeader* httpHeader);
 void establishConnection(int portNumber, int *socketDescriptor, struct sockaddr_in* serverAddress);
 
 // function communicates with client
-void satisfyClient(const int* clientSocketDescriptor, struct Boards* boards);
+void satisfyClient(const int* clientSocketDescriptor);
 
 // function parses request
 int parseRequest(char* request, struct HttpHeader *header, char** content);
@@ -56,18 +56,18 @@ int parseRequest(char* request, struct HttpHeader *header, char** content);
 int parseHeader(char* header, char** method, char** url);
 
 // function process request by doing something with boards
-int processRequest(struct Boards* boards, struct HttpHeader* httpHeader, char* content);
+int processRequest(struct HttpHeader* httpHeader, char* content);
 
 // function parses board name from url
 void parseBoardNameFromUrl(char* url, char** boardName, int boardNameLen, int offset);
 
 // function creates a board and adds it to the existing boards
-int apiCreateNewBoard(struct Boards *boards, char *boardName);
+int apiCreateNewBoard(char *boardName);
 
 // function deletes a board and all it content from existing boards
-int apiDeleteBoard(struct Boards* boards, char* boardName);
+int apiDeleteBoard(char* boardName);
 
-int isBoardAlreadyCreated(struct Boards* boards, char* boardName);
+int isBoardAlreadyCreated(char* boardName);
 
 // function adds char to string
 void addCharToString(char** stringToBeAddedTo, char addedChar);
@@ -121,33 +121,12 @@ int main(int argc, char* argv[]) {
             exit(EXIT_CODE_1);
         }
 
-        // create child process
-        pid = fork();
-
-        if (pid < 0) {
-            fprintf(stderr, "Fork error");
-            close(socketDescriptor);
-            close(clientSocketDescriptor);
-            exit(EXIT_CODE_1);
-        }
-
-        if (pid == 0) {
-            // this is child process - child process will begin communicating with client
-            // "
-            close(socketDescriptor);
-            // " inspired by: Rysavy Ondrej - DemoFork/server.c
-            satisfyClient(&clientSocketDescriptor, boards);
-            // todo close socket
-            exit(EXIT_CODE_0);
-        } else {
-            // this is parent process - parent process closes client socket descriptor and will wait for new connection
-            // "
-            close(clientSocketDescriptor);
-            // " inspired by: Rysavy Ondrej - DemoFork/server.c
-        }
+        satisfyClient(&clientSocketDescriptor);
+        close(clientSocketDescriptor);  // close connection to client
 
     }
 
+    close(socketDescriptor);
     deleteBoards(boards);
     exit(EXIT_CODE_0);
 }
@@ -168,6 +147,7 @@ void sig_handler(int signo) {
         fprintf(stderr, "received SIGSTOP");
     }
 
+    close(socketDescriptor);
     deleteBoards(boards);
     exit(EXIT_CODE_0);
 }
@@ -429,7 +409,7 @@ void establishConnection(int portNumber, int* socketDescriptor, struct sockaddr_
  * @param clientSocketDescriptor socket descriptor of client
  * @param boards struct Boards* pointer to all Boards
  */
-void satisfyClient(const int* clientSocketDescriptor, struct Boards* boards) {
+void satisfyClient(const int* clientSocketDescriptor) {
     char request[BUFSIZ];
     char login[BUFSIZ];
     char response[BUFSIZ];
@@ -459,7 +439,7 @@ void satisfyClient(const int* clientSocketDescriptor, struct Boards* boards) {
     if (responseCode != RESPONSE_CODE_200) {
         // todo something went wrong during parsing
     }
-    responseCode = processRequest(boards, httpHeader, content);
+    responseCode = processRequest(httpHeader, content);
     if (responseCode != RESPONSE_CODE_200 || responseCode != RESPONSE_CODE_201) {
         // todo something went wrong during parsing
     }
@@ -673,7 +653,7 @@ int parseHeader(char* header, char** method, char** url) {
     return headerParsingResult;
 }
 
-int processRequest(struct Boards* boards, struct HttpHeader* httpHeader, char* content) {
+int processRequest(struct HttpHeader* httpHeader, char* content) {
     int responseCode = RESPONSE_CODE_200;
     char* boardName = (char*) malloc(sizeof(char) * 1);
     boardName[0] = '\0';
@@ -684,11 +664,11 @@ int processRequest(struct Boards* boards, struct HttpHeader* httpHeader, char* c
         } else if (strcmp(httpHeader->method, "POST") == 0) {
             int boardNameLen = strlen(httpHeader->url) - strlen("/boards/");
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
-            responseCode = apiCreateNewBoard(boards, boardName);
+            responseCode = apiCreateNewBoard(boardName);
         } else if (strcmp(httpHeader->method, "DELETE") == 0) {
             int boardNameLen = strlen(httpHeader->url) - strlen("/boards/");
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
-
+            responseCode = apiDeleteBoard(boardName);
         } else {
             fprintf(stderr, "Invalid method for /boards manipulation");
             responseCode = RESPONSE_CODE_404;
@@ -746,8 +726,8 @@ void parseBoardNameFromUrl(char* url, char** boardName, int boardNameLen, int of
  *
  * @return 201 on success, 409 when board already exits, 404 if some other error occurred
  */
-int apiCreateNewBoard(struct Boards* boards, char* boardName) {
-    if (isBoardAlreadyCreated(boards, boardName) == 1) {
+int apiCreateNewBoard(char* boardName) {
+    if (isBoardAlreadyCreated(boardName) == 1) {
         return RESPONSE_CODE_409;
     }
 
@@ -778,8 +758,8 @@ int apiCreateNewBoard(struct Boards* boards, char* boardName) {
  *
  * @return 200 if board was deleted, 404 if no such board exists or some other error occurred
  */
-int apiDeleteBoard(struct Boards* boards, char* boardName) {
-    if (isBoardAlreadyCreated(boards, boardName) == 0) {
+int apiDeleteBoard(char* boardName) {
+    if (isBoardAlreadyCreated(boardName) == 0) {
         return RESPONSE_CODE_404;
     }
 
@@ -787,14 +767,21 @@ int apiDeleteBoard(struct Boards* boards, char* boardName) {
     if (first == NULL) {
         return RESPONSE_CODE_404;
     } else{
-        while (first->nextBoard != NULL) {
-            if (strcmp(first->nextBoard->name, boardName) == 0) {
-                struct Board* deletedBoard = first->nextBoard;
-                first->nextBoard = deletedBoard->nextBoard; // shift all the boards
-                deleteBoard(deletedBoard);
-                return RESPONSE_CODE_200;
-            } else {
-                first = first->nextBoard;
+        if (strcmp(first->name, boardName) == 0) {  // board is first int the list
+            struct Board* deletedBoard = first;
+            boards->board = first->nextBoard;
+            deleteBoard(deletedBoard);
+            return RESPONSE_CODE_200;
+        } else {    // board is not first in the list
+            while (first->nextBoard != NULL) {
+                if (strcmp(first->nextBoard->name, boardName) == 0) {
+                    struct Board *deletedBoard = first->nextBoard;
+                    first->nextBoard = deletedBoard->nextBoard; // shift all the boards
+                    deleteBoard(deletedBoard);
+                    return RESPONSE_CODE_200;
+                } else {
+                    first = first->nextBoard;
+                }
             }
         }
     }
@@ -809,7 +796,7 @@ int apiDeleteBoard(struct Boards* boards, char* boardName) {
  * @param boardName char* name of the board that is searched
  * @return 0 if no such board exists, 1 is board already exists
  */
-int isBoardAlreadyCreated(struct Boards* boards, char* boardName) {
+int isBoardAlreadyCreated(char* boardName) {
     int alreadyCreated = 0;
     struct Board* board = boards->board;
 
