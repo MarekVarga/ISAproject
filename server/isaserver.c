@@ -15,6 +15,7 @@
 #include "../api.h"
 
 int socketDescriptor;
+struct Boards* boards;
 
 // function checks and gets arguments
 int checkArgs(int argc, char **argv);
@@ -61,21 +62,43 @@ int processRequest(struct Boards* boards, struct HttpHeader* httpHeader, char* c
 void parseBoardNameFromUrl(char* url, char** boardName, int boardNameLen, int offset);
 
 // function creates a board and adds it to the existing boards
-int createNewBoard(struct Boards *boards, char *boardName);
+int apiCreateNewBoard(struct Boards *boards, char *boardName);
+
+// function deletes a board and all it content from existing boards
+int apiDeleteBoard(struct Boards* boards, char* boardName);
 
 int isBoardAlreadyCreated(struct Boards* boards, char* boardName);
 
 // function adds char to string
 void addCharToString(char** stringToBeAddedTo, char addedChar);
 
+// function handles terminating signals
+void sig_handler(int signo);
+
 int main(int argc, char* argv[]) {
     int port, clientSocketDescriptor, pid;
     struct sockaddr_in serverAddress, clientAddress;
-    struct Boards* boards = createBoards();
+    boards = createBoards();
     if (boards == NULL) {
         fprintf(stderr, "Unable to create initial empty boards");
         exit(1);
     }
+
+    // handle terminating signals
+    // "
+    if (signal(SIGINT, sig_handler) == SIG_ERR) {
+        fprintf(stderr, "Cannot catch SIGINT\n");
+        //exit(EXIT_CODE_1);
+    }
+    if (signal(SIGKILL, sig_handler) == SIG_ERR) {
+        fprintf(stderr, "Cannot catch SIGKILL\n");
+        //exit(EXIT_CODE_1);
+    }
+    if (signal(SIGSTOP, sig_handler) == SIG_ERR) {
+        fprintf(stderr, "Cannot catch SIGSTOP\n");
+        //exit(EXIT_CODE_1);
+    }
+    // " copied from: https://www.thegeekstuff.com/2012/03/catch-signals-sample-c-code
 
     // get arguments
     port = checkArgs(argc, argv);
@@ -86,7 +109,7 @@ int main(int argc, char* argv[]) {
     socklen_t clientAddressLength = sizeof(clientAddress);
     // " inspired by: Rysavy Ondrej - DemoTcp/server.c
 
-    while (SIGINT) {
+    while (1) {
         // call to accept function
         // "
         clientSocketDescriptor = accept(socketDescriptor, (struct sockaddr *) &clientAddress, &clientAddressLength);
@@ -125,8 +148,30 @@ int main(int argc, char* argv[]) {
 
     }
 
+    deleteBoards(boards);
     exit(EXIT_CODE_0);
 }
+
+/**
+ * Function handles terminating signals.
+ * After such signal was caught, boards structure is deleted.
+ *
+ * @param signo int signal number
+ */
+ // "
+void sig_handler(int signo) {
+    if (signo == SIGINT) {
+        fprintf(stderr, "received SIGINT");
+    } else if (signo == SIGKILL) {
+        fprintf(stderr, "received SIGKILL");
+    } else if (signo == SIGSTOP) {
+        fprintf(stderr, "received SIGSTOP");
+    }
+
+    deleteBoards(boards);
+    exit(EXIT_CODE_0);
+}
+// " copied from: https://www.thegeekstuff.com/2012/03/catch-signals-sample-c-code
 
 /**
  * Function checks arguments with getopt(). On success it returns port number.
@@ -191,13 +236,32 @@ struct Boards* createBoards() {
     return boards;
 }
 
+/**
+ * Function deletes all the boards.
+ *
+ * @param boards structure holding pointer to first board
+ */
 void deleteBoards(struct Boards* boards) {
     if (boards != NULL) {
-        // todo
+        if (boards->board != NULL) {
+            struct Board* nextBoard = boards->board;
+            do {
+                deleteBoard(boards->board);
+                nextBoard = nextBoard->nextBoard;
+            } while (nextBoard->nextBoard != NULL);
+        }
+
         free(boards);
     }
 }
 
+/**
+ * Function creates structure representing a board.
+ *
+ * @param boardName char* name of the new board
+ *
+ * @return pointer to structure Board or NULL if malloc was not successful
+ */
 struct Board* createBoard(char* boardName) {
     struct Board* board = malloc(sizeof(struct Board));
     if (board == NULL) {
@@ -213,9 +277,55 @@ struct Board* createBoard(char* boardName) {
     return board;
 }
 
+/**
+ * Function deletes a board with all its content.
+ *
+ * @param board struct Board* that will be deleted
+ */
 void deleteBoard(struct Board* board) {
     if (board != NULL) {
-        // todo
+        free(board->name);
+        free(board->nextBoard);
+        deleteBoardContent(board->content);
+        free(board);
+    }
+}
+
+/**
+ * Function creates new structure holding content of the board.
+ *
+ * @param id int id of the content
+ * @param content char* content
+ *
+ * @return pointe to structure BoardContent or NULL if malloc was not successful
+ */
+struct BoardContent* createBoardContent(int id, char* content) {
+    struct BoardContent* boardContent = malloc(sizeof(struct BoardContent));
+    if (boardContent == NULL) {
+        return NULL;
+    }
+
+    boardContent->id = id;
+    boardContent->content = (char*) malloc(sizeof(char) * (strlen(content) + 1));
+    strcpy(boardContent->content, content);
+    boardContent->nextContent = NULL;
+
+    return boardContent;
+}
+
+/**
+ * Function recursively deletes all BoardContent.
+ *
+ * @param boardContent struct BoardContent* that will be destroyed
+ */
+void deleteBoardContent(struct BoardContent* boardContent) {
+    if (boardContent != NULL) {
+        while (boardContent->nextContent != NULL) {
+            deleteBoardContent(boardContent->nextContent);
+        }
+        free(boardContent->content);
+        free(boardContent->nextContent);
+        free(boardContent);
     }
 }
 
@@ -574,10 +684,11 @@ int processRequest(struct Boards* boards, struct HttpHeader* httpHeader, char* c
         } else if (strcmp(httpHeader->method, "POST") == 0) {
             int boardNameLen = strlen(httpHeader->url) - strlen("/boards/");
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
-            responseCode = createNewBoard(boards, boardName);
+            responseCode = apiCreateNewBoard(boards, boardName);
         } else if (strcmp(httpHeader->method, "DELETE") == 0) {
             int boardNameLen = strlen(httpHeader->url) - strlen("/boards/");
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
+
         } else {
             fprintf(stderr, "Invalid method for /boards manipulation");
             responseCode = RESPONSE_CODE_404;
@@ -630,13 +741,13 @@ void parseBoardNameFromUrl(char* url, char** boardName, int boardNameLen, int of
  * Function creates a new board and appends it to the list of already existing boards.
  * First it searches, whether a board already exits.
  *
- * @param boards structure Boards* holding point to the first board
+ * @param boards structure Boards* holding pointer to the first board
  * @param boardName char* name of the new board
  *
  * @return 201 on success, 409 when board already exits, 404 if some other error occurred
  */
-int createNewBoard(struct Boards* boards, char* boardName) {
-    if (isBoardAlreadyCreated(boardName, boardName) == 1) {
+int apiCreateNewBoard(struct Boards* boards, char* boardName) {
+    if (isBoardAlreadyCreated(boards, boardName) == 1) {
         return RESPONSE_CODE_409;
     }
 
@@ -657,6 +768,38 @@ int createNewBoard(struct Boards* boards, char* boardName) {
     }
 
     return RESPONSE_CODE_201;
+}
+
+/**
+ * Function deletes a board with boardName from the list of boards.
+ *
+ * @param boards holding pointer to the first board
+ * @param boardName char* name of the new board
+ *
+ * @return 200 if board was deleted, 404 if no such board exists or some other error occurred
+ */
+int apiDeleteBoard(struct Boards* boards, char* boardName) {
+    if (isBoardAlreadyCreated(boards, boardName) == 0) {
+        return RESPONSE_CODE_404;
+    }
+
+    struct Board* first = boards->board;
+    if (first == NULL) {
+        return RESPONSE_CODE_404;
+    } else{
+        while (first->nextBoard != NULL) {
+            if (strcmp(first->nextBoard->name, boardName) == 0) {
+                struct Board* deletedBoard = first->nextBoard;
+                first->nextBoard = deletedBoard->nextBoard; // shift all the boards
+                deleteBoard(deletedBoard);
+                return RESPONSE_CODE_200;
+            } else {
+                first = first->nextBoard;
+            }
+        }
+    }
+
+    return RESPONSE_CODE_404;
 }
 
 /**
