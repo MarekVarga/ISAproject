@@ -6,8 +6,8 @@
 #define PROJECT_API_H
 
 char* PROTOCOL_VERSION = "HTTP/1.1";
-char* CONTENT_TYPE = "Content-Type:text/plain";
-char* CONTENT_LENGTH = "Content-Length:";
+char* CONTENT_TYPE = "Content-Type: text/plain";
+char* CONTENT_LENGTH = "Content-Length: ";
 
 typedef struct ApiServiceContent{
     char* commandArgument;
