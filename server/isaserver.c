@@ -1,14 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <netdb.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <ctype.h>
 #include <signal.h>
-#include <pwd.h>
 
 #include "isaserver.h"
 //#include "api.h"
@@ -21,10 +18,7 @@ struct Boards* boards;
 int checkArgs(int argc, char **argv);
 
 // function creates pointer to structure holding all Boards
-struct Boards* createBoards();
-
-// function correctly disposes structure holding all boards
-void deleteBoards();
+void createBoards();
 
 // function recursively deletes all the boards
 void deleteBoardsRecursively();
@@ -53,7 +47,7 @@ struct HttpHeader* createHttpHeader();
 void deleteHttpHeader(struct HttpHeader* httpHeader);
 
 // function tries to establish a server
-void establishConnection(int portNumber, int *socketDescriptor, struct sockaddr_in* serverAddress);
+void establishConnection(int portNumber, struct sockaddr_in* serverAddress);
 
 // function communicates with client
 void satisfyClient(const int* clientSocketDescriptor);
@@ -77,10 +71,10 @@ int parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNa
 int apiGetBoards(char** response);
 
 // function creates a board and adds it to the existing boards
-int apiCreateNewBoard(char *boardName);
+int apiCreateNewBoard(char *boardName, char **response);
 
 // function deletes a board and all it content from existing boards
-int apiDeleteBoard(char* boardName);
+int apiDeleteBoard(char *boardName, char **response);
 
 // function fills response with a content of a board
 int apiGetBoard(char* boardName, char** response);
@@ -116,9 +110,9 @@ int putContentToBoardContent(struct BoardContent *boardContent, int id, char *co
 void sig_handler(int signo);
 
 int main(int argc, char* argv[]) {
-    int port, clientSocketDescriptor, pid;
+    int port, clientSocketDescriptor;
     struct sockaddr_in serverAddress, clientAddress;
-    boards = createBoards();
+    createBoards();
     if (boards == NULL) {
         fprintf(stderr, "Unable to create initial empty boards");
         exit(1);
@@ -136,7 +130,7 @@ int main(int argc, char* argv[]) {
     port = checkArgs(argc, argv);
 
     // make server
-    establishConnection(port, &socketDescriptor, &serverAddress);
+    establishConnection(port, &serverAddress);
     // "
     socklen_t clientAddressLength = sizeof(clientAddress);
     // " inspired by: Rysavy Ondrej - DemoTcp/server.c
@@ -237,36 +231,18 @@ int checkArgs(int argc, char **argv) {
  *
  * @return pointer to structure Boards or NULL if malloc was not successful
  */
-struct Boards* createBoards() {
-    struct Boards* boards = malloc(sizeof(struct Boards));
+void createBoards() {
+    boards = malloc(sizeof(struct Boards));
     if (boards == NULL) {
-        return NULL;
+        exit(EXIT_CODE_1);
     }
 
     boards->board = NULL;
-
-    return boards;
 }
 
 /**
- * Function deletes all the boards.
- *
- * @param boards structure holding pointer to first board
+ * Function recursively destroys all the boards
  */
-void deleteBoards() {
-    if (boards != NULL) {
-        if (boards->board != NULL) {
-            struct Board* nextBoard = boards->board;
-            do {
-                deleteBoard(boards->board);
-                nextBoard = nextBoard->nextBoard;
-            } while (nextBoard->nextBoard != NULL);
-        }
-
-        free(boards);
-    }
-}
-
 void deleteBoardsRecursively() {
     if (boards != NULL) {
         if (boards->board != NULL) {
@@ -312,6 +288,11 @@ void deleteBoard(struct Board* board) {
     }
 }
 
+/**
+ * Function deletes board and all its pointer to next boards
+ *
+ * @param board strut Board* that will be destroyed
+ */
 void deleteBoardRecursively(struct Board* board) {
     if (board != NULL) {
         deleteBoardRecursively(board->nextBoard);
@@ -357,10 +338,14 @@ void deleteBoardContentRecursively(struct BoardContent* boardContent) {
     }
 }
 
+/**
+ * Function deletes board content
+ *
+ * @param boardContent struct BoardContent* that will be destroyed
+ */
 void deleteBoardContent(struct BoardContent* boardContent) {
     if (boardContent != NULL) {
         free(boardContent->content);
-        //free(boardContent->nextContent) // todo really?
         free(boardContent);
     }
 }
@@ -422,13 +407,13 @@ void deleteHttpHeader(struct HttpHeader* httpHeader) {
  * @param socketDescriptor socket descriptor returned by socket() will be stored here
  * @param serverAddress structure with socket information
  */
-void establishConnection(int portNumber, int* socketDescriptor, struct sockaddr_in* serverAddress) {
+void establishConnection(int portNumber, struct sockaddr_in* serverAddress) {
 
     // call to socket function
-    *socketDescriptor = socket(AF_INET, SOCK_STREAM, 0);
+    socketDescriptor = socket(AF_INET, SOCK_STREAM, 0);
 
     // check whether socket descriptor is valid
-    if(*socketDescriptor < 0){
+    if(socketDescriptor < 0){
         fprintf(stderr, "Opening socket resulted in error.\n");
         exit(EXIT_CODE_1);
     }
@@ -442,17 +427,17 @@ void establishConnection(int portNumber, int* socketDescriptor, struct sockaddr_
     socketStructure.sin_port = htons(portNumber);
 
     // call to bind function
-    if ((bind(*socketDescriptor, (struct sockaddr*)&socketStructure, sizeof(socketStructure))) < 0) {
+    if ((bind(socketDescriptor, (struct sockaddr*)&socketStructure, sizeof(socketStructure))) < 0) {
         fprintf(stderr, "Binding resulted in error.\n");
-        close(*socketDescriptor);
+        close(socketDescriptor);
         exit(EXIT_CODE_1);
     }
     // " inspired by: Rysavy Ondrej - DemoTcp/server.c
 
     // call to listen function
-    if ( listen(*socketDescriptor,10) < 0 ) {
+    if ( listen(socketDescriptor,10) < 0 ) {
         fprintf(stderr, "Trying to listen resulted in error.\n");
-        close(*socketDescriptor);
+        close(socketDescriptor);
         exit(EXIT_CODE_1);
     }
 
@@ -480,7 +465,7 @@ void satisfyClient(const int* clientSocketDescriptor) {
     header[0] = '\0';
     char* content = (char*) malloc(sizeof(char) * 1);
     content[0] = '\0';
-    int responseCode = RESPONSE_CODE_200;
+    int responseCode = 0;
     struct HttpHeader* httpHeader = createHttpHeader();
     char* httpResponse = (char*) malloc(sizeof(char) * 1);
     httpResponse[0] = '\0';
@@ -625,16 +610,17 @@ int parseRequest(char* request, struct HttpHeader *header, char** content) {
     method[0] = '\0';
     char* url = (char*) malloc(sizeof(char) * 1);
     url[0] = '\0';
-    int parseResult = RESPONSE_CODE_200;
+    int parseResult = 0;
 
-    // get header
+    // check if blank line exists
     char* headerEnd = strstr(request, "\r\n\r\n");  // header and content is separated by blank line
     if (headerEnd == NULL) {
         fprintf(stderr, "Request is badly formatted");
         return RESPONSE_CODE_404;
     }
 
-    int headerLen = strlen(request) - strlen(headerEnd);
+    // parse header from content
+    int headerLen = (int) (strlen(request) - strlen(headerEnd));
     char* tmpHeader = (char*) malloc(sizeof(char) * (headerLen + 3)); // \r, \n, \0
     bzero(tmpHeader, headerLen + 3);
     for (int i = 0; i < headerLen; i++) {
@@ -653,7 +639,7 @@ int parseRequest(char* request, struct HttpHeader *header, char** content) {
     strcpy(header->url, url);
 
     // get content
-    int contentLen = strlen(request) - strlen(tmpHeader) - 2;   // content is located behind blank line; \r\n
+    int contentLen = (int) (strlen(request) - strlen(tmpHeader) - 2);   // content is located behind blank line; \r\n
     if (contentLen > 0) {
         char* tmpContent = (char*) malloc(sizeof(char) * (contentLen + 1));
         bzero(tmpContent, contentLen+1);
@@ -689,30 +675,28 @@ int parseHeader(char* header, char** method, char** url) {
     int numberOfSpaces = 0;
     int headerParsingResult = RESPONSE_CODE_200;
 
-    for (int i = 0; i < strlen(header); i++) {
-        if (header[i] == ' ' || (header[i] == '\r' && (i+1 < strlen(header)) && header[i+1] == '\n')) {
+    // parse header
+    for (int i = 0; i < (int) strlen(header); i++) {
+        if (header[i] == ' ' || (header[i] == '\r' && (i+1 < (int) strlen(header)) && header[i+1] == '\n')) {
             numberOfSpaces++;
             continue;
         }
 
-        if (numberOfSpaces == 0) {          // Method
+        if (numberOfSpaces == 0) {          // Method is before first space
             addCharToString(&tmpMethod, header[i]);
-        } else if (numberOfSpaces == 1) {   // URL
+        } else if (numberOfSpaces == 1) {   // URL is behind first space
             addCharToString(&tmpUrl, header[i]);
-        } else if (numberOfSpaces == 2) {   // Protocol version
+        } else if (numberOfSpaces == 2) {   // Protocol version is behind second space
             addCharToString(&tmpProtocolVersion, header[i]);
         }
     }
-
-    /*fprintf(stdout, "Method: %s\n", tmpMethod);
-    fprintf(stdout, "Url: %s\n", tmpUrl);
-    fprintf(stdout, "Protocol version: %s\n", tmpProtocolVersion);*/
 
     *method = realloc(*method, sizeof(char) * (strlen(tmpMethod) + 1));
     strcpy(*method, tmpMethod);
     *url = realloc(*url, sizeof(char) * (strlen(tmpUrl) + 1));
     strcpy(*url, tmpUrl);
 
+    // compare protocol version
     if (strcmp(tmpProtocolVersion, PROTOCOL_VERSION) != 0) {
         fprintf(stderr, "Bad protocol version; provided=%s\n required=%s\n", tmpProtocolVersion, PROTOCOL_VERSION);
         headerParsingResult = RESPONSE_CODE_404;
@@ -725,8 +709,20 @@ int parseHeader(char* header, char** method, char** url) {
     return headerParsingResult;
 }
 
-int processRequest(struct HttpHeader *httpHeader, char *content, char **response) {
-    int responseCode = RESPONSE_CODE_200;
+/**
+ * Function processes HTTP request and request result is stored to response.
+ * Based on header method, an appropriate method is called to deal with the request.
+ *
+ * @param httpHeader struct HttpHeader* HTTP request header
+ * @param content char* body of HTTP request
+ * @param response pointer to char* that will contain the result of API
+ *
+ * @return 200 on GET/DELETE/PUT method success, 201 on POST method success, 400 if there is no required content,
+ *          409 if created board/boardContent already exits, 404 on some other errors
+ */
+ // todo check content length
+int processRequest(struct HttpHeader* httpHeader, char* content, char** response) {
+    int responseCode = 0;
     char* boardName = (char*) malloc(sizeof(char) * 1);
     boardName[0] = '\0';
 
@@ -734,13 +730,13 @@ int processRequest(struct HttpHeader *httpHeader, char *content, char **response
         if (strcmp(httpHeader->method, "GET") == 0) {           // GET /boards
             responseCode = apiGetBoards(response);
         } else if (strcmp(httpHeader->method, "POST") == 0) {   // POST /boards/<name>
-            int boardNameLen = strlen(httpHeader->url) - strlen("/boards/");
+            int boardNameLen = (int) (strlen(httpHeader->url) - strlen("/boards/"));
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
-            responseCode = apiCreateNewBoard(boardName);
+            responseCode = apiCreateNewBoard(boardName, NULL);
         } else if (strcmp(httpHeader->method, "DELETE") == 0) { // DELETE /boards/<name>
-            int boardNameLen = strlen(httpHeader->url) - strlen("/boards/");
+            int boardNameLen = (int) (strlen(httpHeader->url) - strlen("/boards/"));
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
-            responseCode = apiDeleteBoard(boardName);
+            responseCode = apiDeleteBoard(boardName, NULL);
         } else {    // unknown HTTP method
             char* invalidMethod = "Unknown method for /boards manipulation";
             *response = realloc(*response, sizeof(char) * (strlen(invalidMethod) + 1));
@@ -749,22 +745,22 @@ int processRequest(struct HttpHeader *httpHeader, char *content, char **response
         }
     } else if (strstr(httpHeader->url, "/board")) {      // request for board
         if (strcmp(httpHeader->method, "GET") == 0) {           // GET /board/<name>
-            int boardNameLen = strlen(httpHeader->url) - strlen("/board/");
+            int boardNameLen = (int) (strlen(httpHeader->url) - strlen("/board/"));
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/board/"));
             responseCode = apiGetBoard(boardName, response);
         } else if (strcmp(httpHeader->method, "POST") == 0) {   // POST /board/<name> <content>
-            int boardNameLen = strlen(httpHeader->url) - strlen("/board/");
+            int boardNameLen = (int) (strlen(httpHeader->url) - strlen("/board/"));
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/board/"));
             responseCode = apiPostToBoard(boardName, content, response);
         } else if (strcmp(httpHeader->method, "DELETE") == 0) { // DELETE /board/<name>/<id>
-            int boardNameAndIdLen = strlen(httpHeader->url) - strlen("/board/");
+            int boardNameAndIdLen = (int) (strlen(httpHeader->url) - strlen("/board/"));
             int id = 0;
             responseCode = parseBoardNameAndIdFromUrl(httpHeader->url, &boardName, &id, boardNameAndIdLen, strlen("/board/"));
             if (responseCode != RESPONSE_CODE_404) {
                 responseCode = apiDeleteContentFromBoard(boardName, id, response);
             }
         } else if (strcmp(httpHeader->method, "PUT") == 0) {    // PUT /board/<name>/<id> <content>
-            int boardNameAndIdLen = strlen(httpHeader->url) - strlen("/board/");
+            int boardNameAndIdLen = (int) (strlen(httpHeader->url) - strlen("/board/"));
             int id = 0;
             responseCode = parseBoardNameAndIdFromUrl(httpHeader->url, &boardName, &id, boardNameAndIdLen, strlen("/board/"));
             if (responseCode != RESPONSE_CODE_404) {
@@ -809,6 +805,17 @@ void parseBoardNameFromUrl(char* url, char** boardName, int boardNameLen, int of
     free(tmpBoardName);
 }
 
+/**
+ * Function parses url from HTTP header to board's name and id.
+ *
+ * @param url char* is url from HTTP header
+ * @param boardName pointer to char* that will contain parsed board's name
+ * @param id int* that will contain parsed id
+ * @param boardNameAndIdLen int length of the <name>/<id> from the url
+ * @param offset int number of chars that <name>/<id> is located in the url
+ *
+ * @return 200 if url was successfully parsed, 404 if <name> and <id> were not joined by '/'
+ */
 int parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNameAndIdLen, int offset) {
     char* tmpBoardName = (char*) malloc(sizeof(char) * (strlen(*boardName) + 1));
     strcpy(tmpBoardName, *boardName);
@@ -825,7 +832,7 @@ int parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNa
     int slashFound = 0;
 
     // parse tmpBoardName for <name> and <id>
-    for (int i = 0; i < strlen(tmpBoardName); i++) {
+    for (int i = 0; i < (int) strlen(tmpBoardName); i++) {
         if (tmpBoardName[i] == '/'){
             slashFound = 1;
             continue;
@@ -851,7 +858,7 @@ int parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNa
     *boardName = realloc(*boardName, sizeof(char) * (strlen(tmpName) + 1));
     strcpy(*boardName, tmpName);
     long longId = strtol(tmpId, NULL, 10);
-    *id = longId;
+    *id = (int) longId;
 
     free(tmpBoardName);
     free(tmp);
@@ -861,6 +868,14 @@ int parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNa
     return slashFound == 1 ? RESPONSE_CODE_200 : RESPONSE_CODE_404;
 }
 
+/**
+ * Function represents API GET /boards
+ * Function fills response with the names of all the boards
+ *
+ * @param response pointer to char* that will hold all the names of the boards
+ *
+ * @return 200 on success, 404 if no board exists or if some error occurred
+ */
 int apiGetBoards(char** response) {
     if (boards->board == NULL) {
         *response = realloc(*response, sizeof(char) * (strlen("No board exits") + 1));
@@ -874,6 +889,7 @@ int apiGetBoards(char** response) {
     char* tmp = (char*) malloc(sizeof(char) * 1);
     tmp[0] = '\0';
 
+    // go through each board and append its name and '\n' to the tmpResponse
     while (board != NULL) {
         tmp = realloc(tmp, sizeof(char) * (strlen(tmpContent) + 1));
         strcpy(tmp, tmpContent);
@@ -885,6 +901,7 @@ int apiGetBoards(char** response) {
         board = board->nextBoard;
     }
 
+    // realloc and copy tmpResponse to response
     *response = realloc(*response, sizeof(char) * (strlen(tmpContent) + 1));
     strcpy(*response, tmpContent);
 
@@ -894,32 +911,38 @@ int apiGetBoards(char** response) {
 }
 
 /**
+ * Function represents API POST /boards/<name>
  * Function creates a new board and appends it to the list of already existing boards.
- * First it searches, whether a board already exits.
  *
- * @param boards structure Boards* holding pointer to the first board
  * @param boardName char* name of the new board
+ * @param response pointer to char* that will contain board content or error if some occurs
  *
  * @return 201 on success, 409 when board already exits, 404 if some other error occurred
  */
-int apiCreateNewBoard(char* boardName) {
+int apiCreateNewBoard(char* boardName, char** response) {
     if (isBoardAlreadyCreated(boardName) == 1) {
+        *response = realloc(*response, sizeof(char) * (strlen("Board already exits") + 1));
+        strcpy(*response, "Board already exits");
         return RESPONSE_CODE_409;
     }
 
     struct Board* newBoard = createBoard(boardName);
     if (newBoard == NULL) {
+        *response = realloc(*response, sizeof(char) * (strlen("Malloc error on board creation") + 1));
+        strcpy(*response, "Malloc error on board creation");
         return RESPONSE_CODE_404;
     }
 
     struct Board* first = boards->board;
-    if (first == NULL) {
+    if (first == NULL) {    // no board exits yet
         boards->board = newBoard;
     } else {
+        // find last board
         while (first->nextBoard != NULL) {
             first = first->nextBoard;
         }
 
+        // add new board
         first->nextBoard = newBoard;
     }
 
@@ -927,38 +950,38 @@ int apiCreateNewBoard(char* boardName) {
 }
 
 /**
+ * Function represents API DELETE /boards/<name>
  * Function deletes a board with boardName from the list of boards.
  *
- * @param boards holding pointer to the first board
  * @param boardName char* name of the new board
+ * @param response pointer to char* that will contain board content or error if some occurs
  *
  * @return 200 if board was deleted, 404 if no such board exists or some other error occurred
  */
-int apiDeleteBoard(char* boardName) {
+int apiDeleteBoard(char* boardName, char** response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
+        *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
+        strcpy(*response, "No such board exits");
         return RESPONSE_CODE_404;
     }
 
     struct Board* first = boards->board;
-    if (first == NULL) {
-        return RESPONSE_CODE_404;
-    } else{
-        if (strcmp(first->name, boardName) == 0) {  // board is first int the list
-            struct Board* deletedBoard = first;
-            boards->board = first->nextBoard;
-            deleteBoard(deletedBoard);
-            return RESPONSE_CODE_200;
-        } else {    // board is not first in the list
-            while (first->nextBoard != NULL) {
-                if (strcmp(first->nextBoard->name, boardName) == 0) {
-                    struct Board *deletedBoard = first->nextBoard;
-                    first->nextBoard = deletedBoard->nextBoard; // shift all the boards
-                    deletedBoard->nextBoard = NULL;
-                    deleteBoard(deletedBoard);
-                    return RESPONSE_CODE_200;
-                } else {
-                    first = first->nextBoard;
-                }
+    if (strcmp(first->name, boardName) == 0) {  // board is first int the list
+        struct Board* deletedBoard = first;
+        boards->board = first->nextBoard;
+        deleteBoard(deletedBoard);
+        return RESPONSE_CODE_200;
+    } else {    // board is not first in the list
+        // find board
+        while (first->nextBoard != NULL) {
+            if (strcmp(first->nextBoard->name, boardName) == 0) {
+                struct Board *deletedBoard = first->nextBoard;
+                first->nextBoard = deletedBoard->nextBoard; // shift all the boards
+                deletedBoard->nextBoard = NULL;
+                deleteBoard(deletedBoard);
+                return RESPONSE_CODE_200;
+            } else {
+                first = first->nextBoard;
             }
         }
     }
@@ -966,6 +989,15 @@ int apiDeleteBoard(char* boardName) {
     return RESPONSE_CODE_404;
 }
 
+/**
+ * Function represents API GET /board/<name>
+ * Function fills response with the content of the board <name>
+ *
+ * @param boardName char* name of the board
+ * @param response pointer to char* that will contain board content or error if some occurs
+ *
+ * @return 200 on success or 404 when desired board does not exist or board's content does not exist or some other error occurred
+ */
 int apiGetBoard(char* boardName, char** response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
         *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
@@ -973,15 +1005,16 @@ int apiGetBoard(char* boardName, char** response) {
         return RESPONSE_CODE_404;
     }
 
+    // find board
     struct Board* board = boards->board;
     do {
         if (strcmp(board->name, boardName) == 0) {
-            if (board->content == NULL) {
+            if (board->content == NULL) {   // no board content
                 *response = realloc(*response, sizeof(char) * (strlen("No content for this board exits") + 1));
                 strcpy(*response, "No content for this board exits");
                 return RESPONSE_CODE_404;
             } else{
-                return fillResponseWithBoardContent(board->content, response);
+                return fillResponseWithBoardContent(board->content, response);  // fill response with board's content
             }
         }
         board = board->nextBoard;
@@ -990,13 +1023,22 @@ int apiGetBoard(char* boardName, char** response) {
     return RESPONSE_CODE_404;
 }
 
-int fillResponseWithBoardContent(struct BoardContent *boardContent, char **response) {
+/**
+ * Function prepares response by filling all the content of the board to it.
+ *
+ * @param boardContent struct BoardContent* board content that will be put to response
+ * @param response pointer to char* is response that will be filled with board content
+ *
+ * @return 200 on success or 404 on failure
+ */
+int fillResponseWithBoardContent(struct BoardContent* boardContent, char** response) {
     char* tmpResponse = (char*) malloc(sizeof(char) * 1);
     tmpResponse[0] = '\0';
     char* tmp = (char*) malloc(sizeof(char) * 1);
     tmp[0] ='\0';
     struct BoardContent* tmpContent = boardContent;
 
+    // copy each line of the board content to tmpResponse variable
     do {
         tmp = realloc(tmp, sizeof(char) * (strlen(tmpResponse) + 1));
         strcpy(tmp, tmpResponse);
@@ -1007,6 +1049,7 @@ int fillResponseWithBoardContent(struct BoardContent *boardContent, char **respo
         tmpContent = tmpContent->nextContent;
     } while (tmpContent != NULL);
 
+    // realloc and copy to *response
     *response = realloc(*response, sizeof(char) * (strlen(tmpResponse) + 1));
     strcpy(*response, tmpResponse);
 
@@ -1015,6 +1058,16 @@ int fillResponseWithBoardContent(struct BoardContent *boardContent, char **respo
     return RESPONSE_CODE_200;
 }
 
+/**
+ * Function represents API POST /board/<name> <content>
+ * Function appends new content at the end of the current board content
+ *
+ * @param boardName char* name of the board whose content will be updated
+ * @param content char* new content that will be appended at the end of current content
+ * @param response pointer to char* that will be contain error message if some occurs
+ *
+ * @return 201 on success or 404 on failure
+ */
 int apiPostToBoard(char *boardName, char *content, char **response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
         *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
@@ -1022,10 +1075,11 @@ int apiPostToBoard(char *boardName, char *content, char **response) {
         return RESPONSE_CODE_404;
     }
 
+    // find board
     struct Board* board = boards->board;
     do {
         if (strcmp(board->name, boardName) == 0) {
-            appendBoardContent(board, content);
+            appendBoardContent(board, content); // append content
             return RESPONSE_CODE_201;
         }
         board = board->nextBoard;
@@ -1034,6 +1088,16 @@ int apiPostToBoard(char *boardName, char *content, char **response) {
     return RESPONSE_CODE_404;
 }
 
+/**
+ * Function represents API DELETE /board/<name>/<id>
+ * Function deletes content at id <id> of the board <name>.
+ *
+ * @param boardName char* name of the board whose content will be deleted
+ * @param id int id of the content that will be replaced
+ * @param response pointer to char* that will be contain error message if some occurs
+ *
+ * @return 200 on success or 404 if some error occurred
+ */
 int apiDeleteContentFromBoard(char* boardName, int id, char** response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
         *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
@@ -1041,10 +1105,11 @@ int apiDeleteContentFromBoard(char* boardName, int id, char** response) {
         return RESPONSE_CODE_404;
     }
 
+    // find board
     struct Board* board = boards->board;
     do {
         if (strcmp(board->name, boardName) == 0) {
-            return deleteBoardContentForId(&board->content, id, response);
+            return deleteBoardContentForId(&board->content, id, response);  // delete content
         }
         board = board->nextBoard;
     } while (board != NULL);
@@ -1052,6 +1117,17 @@ int apiDeleteContentFromBoard(char* boardName, int id, char** response) {
     return RESPONSE_CODE_404;
 }
 
+/**
+ * Function represents API PUT /board/<name>/<id> <content>
+ * Function overwrites content with <content> located at id <id> of the board <name>'s content
+ *
+ * @param boardName char* name of the board whose content will be updated
+ * @param id int id of the content that will be replaced
+ * @param content char* replacing content
+ * @param response pointer to char* that will be contain error message if some occurs
+ *
+ * @return 200 on success or 404 if some error occurred
+ */
 int apiPutContentToBoard(char* boardName, int id, char* content, char** response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
         *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
@@ -1059,10 +1135,11 @@ int apiPutContentToBoard(char* boardName, int id, char* content, char** response
         return RESPONSE_CODE_404;
     }
 
+    // find board
     struct Board* board = boards->board;
     do {
         if (strcmp(board->name, boardName) == 0) {
-            return putContentToBoardContent(board->content, id, content, NULL);
+            return putContentToBoardContent(board->content, id, content, NULL); // change content
         }
         board = board->nextBoard;
     } while (board != NULL);
@@ -1075,6 +1152,7 @@ int apiPutContentToBoard(char* boardName, int id, char* content, char** response
  *
  * @param boards struct Boards* structure of all boards
  * @param boardName char* name of the board that is searched
+ *
  * @return 0 if no such board exists, 1 is board already exists
  */
 int isBoardAlreadyCreated(char* boardName) {
@@ -1091,6 +1169,12 @@ int isBoardAlreadyCreated(char* boardName) {
     return alreadyCreated;
 }
 
+/**
+ * Function appends new content at the end of the current content of the board.
+ *
+ * @param board struct Board* that will contain new content
+ * @param content char* content to be appended
+ */
 void appendBoardContent(struct Board *board, char *content) {
     if (board->content == NULL) {   // no content for current board, start with 1
         struct BoardContent* boardContent = createBoardContent(1, content);
@@ -1098,15 +1182,26 @@ void appendBoardContent(struct Board *board, char *content) {
         return;
     }
 
+    // find last content
     struct BoardContent* boardContent = board->content;
     while (boardContent->nextContent != NULL) {
         boardContent = boardContent->nextContent;
     }
 
+    // append new content
     struct BoardContent* newBoardContent = createBoardContent(boardContent->id+1, content);
     boardContent->nextContent = newBoardContent;
 }
 
+/**
+ * Function deletes content located at id.
+ *
+ * @param boardContent struct BoardContent* content of a board
+ * @param id int id of a content that will be deleted
+ * @param response pointer to char* that will be contain error message if some occurs
+ *
+ * @return 200 on successful deletion of content, other 404 if some error occurred
+ */
 int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **response) {
     if (boardContent == NULL || *boardContent == NULL) {
         *response = realloc(*response, sizeof(char) * (strlen("No such board content exits") + 1));
@@ -1117,13 +1212,12 @@ int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **r
     int foundToBeDeletedBoardContent = 0;
     struct BoardContent* tmpContent = *boardContent;
 
-    if (tmpContent->id == id) {
+    if (tmpContent->id == id) { // if id is the id of the content
         foundToBeDeletedBoardContent = 1;
         struct BoardContent* toBeDeletedBoardContent = tmpContent;
         tmpContent = toBeDeletedBoardContent->nextContent;
         toBeDeletedBoardContent->nextContent = NULL;
         deleteBoardContent(toBeDeletedBoardContent);
-        //free(toBeDeletedBoardContent);
     }
     struct BoardContent* first = tmpContent;
     do {
@@ -1136,7 +1230,6 @@ int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **r
                 first->nextContent = toBeDeletedBoardContent->nextContent;
                 toBeDeletedBoardContent->nextContent = NULL;
                 deleteBoardContent(toBeDeletedBoardContent);
-                //free(toBeDeletedBoardContent);
             }
         }
         first = first->nextContent;
