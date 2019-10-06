@@ -101,7 +101,7 @@ int apiPutContentToBoard(char* boardName, int id, char* content, char** response
 int isBoardAlreadyCreated(char* boardName);
 
 // function finds id of the last content of a board
-int findLastIdOfBoardContent(struct Board* board);
+void appendBoardContent(struct Board *board, char *content);
 
 // function adds char to string
 void addCharToString(char** stringToBeAddedTo, char addedChar);
@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
     // " inspired by: Rysavy Ondrej - DemoTcp/server.c
 
     int i = 0;
-    while (i < 10) {
+    while (i < 5) {
         // call to accept function
         // "
         clientSocketDescriptor = accept(socketDescriptor, (struct sockaddr *) &clientAddress, &clientAddressLength);
@@ -162,6 +162,7 @@ int main(int argc, char* argv[]) {
 
     close(socketDescriptor);
     deleteBoardsRecursively();
+    free(boards);
     exit(EXIT_CODE_0);
 }
 
@@ -179,6 +180,7 @@ void sig_handler(int signo) {
 
     close(socketDescriptor);
     deleteBoardsRecursively();
+    free(boards);
     exit(EXIT_CODE_0);
 }
 // " copied from: https://www.thegeekstuff.com/2012/03/catch-signals-sample-c-code
@@ -269,6 +271,7 @@ void deleteBoardsRecursively() {
     if (boards != NULL) {
         if (boards->board != NULL) {
             deleteBoardRecursively(boards->board);
+            free(boards->board);
         }
     }
 }
@@ -303,8 +306,8 @@ struct Board* createBoard(char* boardName) {
 void deleteBoard(struct Board* board) {
     if (board != NULL) {
         free(board->name);
-        //free(board->nextBoard);   // todo really?
         deleteBoardContentRecursively(board->content);
+        free(board->content);
         free(board);
     }
 }
@@ -316,7 +319,6 @@ void deleteBoardRecursively(struct Board* board) {
         free(board->nextBoard);
         deleteBoardContentRecursively(board->content);
         free(board->content);
-        free(board);
     }
 }
 
@@ -349,12 +351,9 @@ struct BoardContent* createBoardContent(int id, char* content) {
  */
 void deleteBoardContentRecursively(struct BoardContent* boardContent) {
     if (boardContent != NULL) {
-        while (boardContent->nextContent != NULL) {
-            deleteBoardContentRecursively(boardContent->nextContent);
-        }
+        deleteBoardContentRecursively(boardContent->nextContent);
         free(boardContent->content);
-        //free(boardContent->nextContent);  // todo really?
-        free(boardContent);
+        free(boardContent->nextContent);
     }
 }
 
@@ -847,8 +846,8 @@ int apiGetBoards(char** response) {
         tmpContent = realloc(tmpContent, sizeof(char) * (strlen(tmp) + strlen(board->name) + 2));   // \n, \0
         strcpy(tmpContent, tmp);
         strcat(tmpContent, board->name);
-        tmpContent[strlen(tmpContent)] = '\n';
-        tmpContent[strlen(tmpContent)] = '\0';
+        tmpContent[strlen(tmp)+strlen(board->name)] = '\n';
+        tmpContent[strlen(tmp)+strlen(board->name)+1] = '\0';
         board = board->nextBoard;
     }
 
@@ -875,7 +874,7 @@ int apiCreateNewBoard(char* boardName) {
     }
 
     struct Board* newBoard = createBoard(boardName);
-    if (boardName == NULL) {
+    if (newBoard == NULL) {
         return RESPONSE_CODE_404;
     }
 
@@ -920,6 +919,7 @@ int apiDeleteBoard(char* boardName) {
                 if (strcmp(first->nextBoard->name, boardName) == 0) {
                     struct Board *deletedBoard = first->nextBoard;
                     first->nextBoard = deletedBoard->nextBoard; // shift all the boards
+                    deletedBoard->nextBoard = NULL;
                     deleteBoard(deletedBoard);
                     return RESPONSE_CODE_200;
                 } else {
@@ -991,15 +991,13 @@ int apiPostToBoard(char *boardName, char *content, char **response) {
     struct Board* board = boards->board;
     do {
         if (strcmp(board->name, boardName) == 0) {
-            int id = findLastIdOfBoardContent(board);
-            struct BoardContent* boardContent = createBoardContent(id, content);
-            board->content = malloc(sizeof(struct BoardContent));
-            board->content = boardContent;
+            appendBoardContent(board, content);
+            return RESPONSE_CODE_201;
         }
         board = board->nextBoard;
     } while (board != NULL);
 
-    return RESPONSE_CODE_201;
+    return RESPONSE_CODE_404;
 }
 
 int apiDeleteContentFromBoard(char* boardName, int id, char** response) {
@@ -1059,9 +1057,11 @@ int isBoardAlreadyCreated(char* boardName) {
     return alreadyCreated;
 }
 
-int findLastIdOfBoardContent(struct Board* board) {
+void appendBoardContent(struct Board *board, char *content) {
     if (board->content == NULL) {   // no content for current board, start with 1
-        return 1;
+        struct BoardContent* boardContent = createBoardContent(1, content);
+        board->content = boardContent;
+        return;
     }
 
     struct BoardContent* boardContent = board->content;
@@ -1069,8 +1069,8 @@ int findLastIdOfBoardContent(struct Board* board) {
         boardContent = boardContent->nextContent;
     }
 
-    int returned = boardContent->id;
-    return returned+1;
+    struct BoardContent* newBoardContent = createBoardContent(boardContent->id+1, content);
+    boardContent->nextContent = newBoardContent;
 }
 
 int deleteBoardContentForId(struct BoardContent *boardContent, int id, char **response) {
@@ -1090,6 +1090,7 @@ int deleteBoardContentForId(struct BoardContent *boardContent, int id, char **re
                 foundToBeDeletedBoardContent = 1;
                 struct BoardContent* toBeDeletedBoardContent = first;
                 first->nextContent = toBeDeletedBoardContent->nextContent;
+                toBeDeletedBoardContent->nextContent = NULL;
                 deleteBoardContent(toBeDeletedBoardContent);
             }
         }
