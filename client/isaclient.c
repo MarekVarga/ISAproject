@@ -323,9 +323,7 @@ void parseCommandForNameAndId(char* command, char **name, char **id) {
     for (int i = 0; i < strlen(command); i++) {
         if (command[i] == ' ') {
             numberOfSpaces++;
-            if (numberOfSpaces < 3) {
-                continue;
-            }
+            continue;
         }
         if (numberOfSpaces >= 3) {
             // <id> part of command is located behind third space

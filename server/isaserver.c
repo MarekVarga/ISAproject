@@ -71,7 +71,7 @@ int processRequest(struct HttpHeader *httpHeader, char *content, char **response
 void parseBoardNameFromUrl(char* url, char** boardName, int boardNameLen, int offset);
 
 // function parses board name and id from url
-void parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNameAndIdLen, int offset);
+int parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNameAndIdLen, int offset);
 
 // function fills response with existing boards
 int apiGetBoards(char** response);
@@ -107,7 +107,7 @@ void appendBoardContent(struct Board *board, char *content);
 void addCharToString(char** stringToBeAddedTo, char addedChar);
 
 // function deletes content at id
-int deleteBoardContentForId(struct BoardContent *boardContent, int id, char **response);
+int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **response);
 
 // function over board content at id with new content
 int putContentToBoardContent(struct BoardContent *boardContent, int id, char *content, char **response);
@@ -759,13 +759,17 @@ int processRequest(struct HttpHeader *httpHeader, char *content, char **response
         } else if (strcmp(httpHeader->method, "DELETE") == 0) { // DELETE /board/<name>/<id>
             int boardNameAndIdLen = strlen(httpHeader->url) - strlen("/board/");
             int id = 0;
-            parseBoardNameAndIdFromUrl(httpHeader->url, &boardName, &id, boardNameAndIdLen, strlen("/board/"));
-            responseCode = apiDeleteContentFromBoard(boardName, id, response);
+            responseCode = parseBoardNameAndIdFromUrl(httpHeader->url, &boardName, &id, boardNameAndIdLen, strlen("/board/"));
+            if (responseCode != RESPONSE_CODE_404) {
+                responseCode = apiDeleteContentFromBoard(boardName, id, response);
+            }
         } else if (strcmp(httpHeader->method, "PUT") == 0) {    // PUT /board/<name>/<id> <content>
             int boardNameAndIdLen = strlen(httpHeader->url) - strlen("/board/");
             int id = 0;
-            parseBoardNameAndIdFromUrl(httpHeader->url, &boardName, &id, boardNameAndIdLen, strlen("/board/"));
-            responseCode = apiPutContentToBoard(boardName, id, content, response);
+            responseCode = parseBoardNameAndIdFromUrl(httpHeader->url, &boardName, &id, boardNameAndIdLen, strlen("/board/"));
+            if (responseCode != RESPONSE_CODE_404) {
+                responseCode = apiPutContentToBoard(boardName, id, content, response);
+            }
         } else {    // unknown HTTP method
             char* invalidMethod = "Unknown method for /board manipulation";
             *response = realloc(*response, sizeof(char) * (strlen(invalidMethod) + 1));
@@ -805,26 +809,56 @@ void parseBoardNameFromUrl(char* url, char** boardName, int boardNameLen, int of
     free(tmpBoardName);
 }
 
-void parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNameAndIdLen, int offset) {
-    parseBoardNameFromUrl(url, boardName, boardNameAndIdLen, offset);
-    // *boardName contains "<name>/<id>
+int parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNameAndIdLen, int offset) {
+    char* tmpBoardName = (char*) malloc(sizeof(char) * (strlen(*boardName) + 1));
+    strcpy(tmpBoardName, *boardName);
+    // obtain board name and id from url
+    parseBoardNameFromUrl(url, &tmpBoardName, boardNameAndIdLen, offset);
+    // tmpBoardName contains "<name>/<id>
 
-    char* idWithSlash = strchr(*boardName, '/');
-    // copy id
-    char* tmpId = (char*) malloc(sizeof(char) * (strlen(idWithSlash)));
-    strncpy(tmpId, idWithSlash+1, strlen(idWithSlash)-1);
-    // copy name
-    int nameLen = strlen(idWithSlash) - strlen(tmpId);
-    char* tmpName = (char*) malloc(sizeof(char) * nameLen);
-    strncpy(tmpName, idWithSlash, nameLen-1);
+    char *tmpId = (char *) malloc(sizeof(char) * 1);
+    tmpId[0] = '\0';
+    char *tmpName = (char *) malloc(sizeof(char) * 1);
+    tmpName[0] ='\0';
+    char* tmp = (char*) malloc(sizeof(char) * 1);
+    tmp[0] = '\0';
+    int slashFound = 0;
+
+    // parse tmpBoardName for <name> and <id>
+    for (int i = 0; i < strlen(tmpBoardName); i++) {
+        if (tmpBoardName[i] == '/'){
+            slashFound = 1;
+            continue;
+        }
+
+        if (slashFound == 1) {  // <id> is behind '/'
+            tmp = realloc(tmp, sizeof(char) * (strlen(tmpId) + 1));
+            strcpy(tmp, tmpId);
+            tmpId = realloc(tmpId, sizeof(char) * (strlen(tmp) + 2));
+            strcpy(tmpId, tmp);
+            tmpId[strlen(tmp)] = tmpBoardName[i];
+            tmpId[strlen(tmp)+1] = '\0';
+        } else {    // <name> is before '/'
+            tmp = realloc(tmp, sizeof(char) * (strlen(tmpName) + 1));
+            strcpy(tmp, tmpName);
+            tmpName = realloc(tmpName, sizeof(char) * (strlen(tmp) + 2));
+            strcpy(tmpName, tmp);
+            tmpName[strlen(tmp)] = tmpBoardName[i];
+            tmpName[strlen(tmp)+1] = '\0';
+        }
+    }
 
     *boardName = realloc(*boardName, sizeof(char) * (strlen(tmpName) + 1));
     strcpy(*boardName, tmpName);
     long longId = strtol(tmpId, NULL, 10);
     *id = longId;
 
+    free(tmpBoardName);
+    free(tmp);
     free(tmpName);
     free(tmpId);
+
+    return slashFound == 1 ? RESPONSE_CODE_200 : RESPONSE_CODE_404;
 }
 
 int apiGetBoards(char** response) {
@@ -1010,7 +1044,7 @@ int apiDeleteContentFromBoard(char* boardName, int id, char** response) {
     struct Board* board = boards->board;
     do {
         if (strcmp(board->name, boardName) == 0) {
-            return deleteBoardContentForId(board->content, id, response);
+            return deleteBoardContentForId(&board->content, id, response);
         }
         board = board->nextBoard;
     } while (board != NULL);
@@ -1073,31 +1107,42 @@ void appendBoardContent(struct Board *board, char *content) {
     boardContent->nextContent = newBoardContent;
 }
 
-int deleteBoardContentForId(struct BoardContent *boardContent, int id, char **response) {
-    if (boardContent == NULL) {
+int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **response) {
+    if (boardContent == NULL || *boardContent == NULL) {
         *response = realloc(*response, sizeof(char) * (strlen("No such board content exits") + 1));
         strcpy(*response, "No such board content exits");
         return RESPONSE_CODE_404;
     }
 
-    struct BoardContent* first = boardContent;
     int foundToBeDeletedBoardContent = 0;
-    while (first->nextContent != NULL) {
+    struct BoardContent* tmpContent = *boardContent;
+
+    if (tmpContent->id == id) {
+        foundToBeDeletedBoardContent = 1;
+        struct BoardContent* toBeDeletedBoardContent = tmpContent;
+        tmpContent = toBeDeletedBoardContent->nextContent;
+        toBeDeletedBoardContent->nextContent = NULL;
+        deleteBoardContent(toBeDeletedBoardContent);
+        //free(toBeDeletedBoardContent);
+    }
+    struct BoardContent* first = tmpContent;
+    do {
         if (foundToBeDeletedBoardContent == 1) {    // lower id for each content after deleted one
             first->id--;
         } else {
-            if (first->id == id) {
+            if (first->nextContent->id == id) {
                 foundToBeDeletedBoardContent = 1;
-                struct BoardContent* toBeDeletedBoardContent = first;
+                struct BoardContent* toBeDeletedBoardContent = first->nextContent;
                 first->nextContent = toBeDeletedBoardContent->nextContent;
                 toBeDeletedBoardContent->nextContent = NULL;
                 deleteBoardContent(toBeDeletedBoardContent);
+                //free(toBeDeletedBoardContent);
             }
         }
-
         first = first->nextContent;
-    }
+    } while(first != NULL);
 
+    *boardContent = tmpContent;
     return RESPONSE_CODE_200;
 }
 
