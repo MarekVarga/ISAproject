@@ -178,7 +178,6 @@ void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
             content[0] = '\0';
             parseCommandForNameAndIdAndContent(command, &name, &id, &content);
             concatNameAndId(name, id);
-            //createRequestWithoutBody(httpRequest, PUT_BOARD, name, hostname);
             createRequestWithBody(httpRequest, PUT_BOARD, name, hostname, content);
             free(content);
             free(id);

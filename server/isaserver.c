@@ -1299,7 +1299,14 @@ void addCharToString(char** stringToBeAddedTo, char addedChar) {
     free(tmp2);
 }
 
+/**
+ * Function converts integer to string.
+ *
+ * @param number int number to be converted
+ * @param result pointer to char* result
+ */
 void intToString(int number, char** result) {
+    // "
     char const digit[] = "0123456789";
     char* tmpResult = (char*) malloc(sizeof(char) * 1);
     tmpResult[0] = '\0';
@@ -1323,6 +1330,7 @@ void intToString(int number, char** result) {
         tmpResult[--numLen] = digit[number%10];
         number /= 10;
     } while (number);
+    // " inspired by https://stackoverflow.com/questions/9655202/how-to-convert-integer-to-string-in-c
 
     *result = realloc(*result, sizeof(char) * (strlen(tmpResult)+1));
     strcpy(*result, tmpResult);
