@@ -41,15 +41,18 @@ void createRequestWithoutBody(char** httpRequest, char* method, char* url, char*
 // function creates HTTP request with body
 void createRequestWithBody(char** httpRequest, char* method, char* url, char* hostname, char* content);
 
-struct Api* newApi(char* command, char* apiEquivalent, int numberOfCommands);
-
-void deleteApi(struct Api* api);
-
 // function finds server and creates socket
 void findServer(char **hostname, const int *portNumber, struct hostent* server, struct sockaddr_in *serverAddress, int *clientSocket);
 
 // function connects to server, sends requests and prints responses
 void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, char** apiCommand, char** hostname);
+
+// function parses HTTP request to header and content
+int parseResponse(char* response, char** header, char** body);
+
+int parseHeader(char* request, int* responseCode, int* contentLength);
+
+void addCharToString(char** stringToBeAddedTo, char addedChar);
 
 int main(int argc, char* argv[]) {
     int clientSocket = 0;
@@ -605,36 +608,6 @@ void createRequestWithBody(char** httpRequest, char* method, char* url, char* ho
     free(host);
 }
 
-struct Api* newApi(char* command, char* apiEquivalent, int numberOfCommands) {
-    struct Api* newApi = malloc(sizeof(struct Api));
-    if (newApi == NULL) {
-        return NULL;
-    }
-
-    newApi->commandArgument = malloc(sizeof(char) * (strlen(command) + 1));
-    if (newApi->commandArgument == NULL) {
-        return NULL;
-    }
-    strcpy(newApi->commandArgument, command);
-
-    newApi->apiEquivalent = malloc(sizeof(char) * (strlen(apiEquivalent) + 1));
-    if (newApi->apiEquivalent == NULL) {
-        return NULL;
-    }
-    strcpy(newApi->apiEquivalent, apiEquivalent);
-
-    newApi->numberOfCommands = numberOfCommands;
-    return newApi;
-}
-
-void deleteApi(struct Api* api) {
-    if (api != NULL) {
-        free(api->apiEquivalent);
-        free(api->commandArgument);
-        free(api);
-    }
-}
-
 /**
  * Function finds server according to hostname argument (either name or IPv4). Function also creates socket.
  *
@@ -675,7 +648,6 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     httpRequest[0] = '\0';
     prepareHttpRequest(*apiCommand, *hostname, &httpRequest);
 
-    //ssize_t r = 0;
     char request[BUFSIZ];
     char response[BUFSIZ];
     char message [BUFSIZ];
@@ -702,6 +674,23 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
         close(*clientSocket);
         exit(1);
     }
+
+    // read response
+    if (read(*clientSocket, response, BUFSIZ) < 0) {
+        fprintf(stderr, "Reading from socket resulted in error.\n");
+        close(*clientSocket);
+        exit(EXIT_CODE_1);
+    }
+    //fprintf(stdout, "%s\n", response);
+    char* tmpHeader = (char*) malloc(sizeof(char) * 1);
+    tmpHeader[0] = '\0';
+    char* tmpBody = (char*) malloc(sizeof(char) * 1);
+    tmpBody[0] = '\0';
+    parseResponse(response, &tmpHeader, &tmpBody);
+
+    // print header (without blank line) and content
+    fprintf(stderr, "HTTP response header:\r%s", tmpHeader);
+    fprintf(stdout, "HTTP response body:\r%s\n", tmpBody);
 
     // if client was run with -n or -f argument
     /*if ( *l == 0) {
@@ -759,4 +748,153 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
 
     free(httpRequest);
     close(*clientSocket);
+}
+
+/**
+ * Function parses HTTP response to header and body.
+ * Firstly header is separated from the response by locating blank line in the message.
+ * Body can be empty or contain message from server.
+ *
+ * @param response char* HTTP response
+ * @param header pointer to char* where separated header from the response will be stored
+ * @param body  pointer to char* where separated body from the response will be stored
+ *
+ * @return 1 on success, 0 when an error occurred
+ */
+int parseResponse(char* response, char** header, char** body) {
+    // check if blank line exists
+    char* headerEnd = strstr(response, "\r\n\r\n");  // header and content is separated by blank line
+    if (headerEnd == NULL) {
+        fprintf(stderr, "Response is badly formatted");
+        return 0;
+    }
+
+    // separate header from content
+    int headerLen = (int) (strlen(response) - strlen(headerEnd));
+    char* tmpHeader = (char*) malloc(sizeof(char) * (headerLen + 3)); // \r, \n, \0
+    bzero(tmpHeader, headerLen + 3);
+    for (int i = 0; i < headerLen; i++) {
+        tmpHeader[i] = response[i];
+    }
+    tmpHeader[headerLen] = '\r';
+    tmpHeader[headerLen+1] = '\n';
+    tmpHeader[headerLen+2] = '\0';
+    *header = realloc(*header, sizeof(char) * (strlen(tmpHeader) + 1));
+    strcpy(*header, tmpHeader);
+
+    // parse header
+    int responseCode = 0;
+    int contentLenght = 0;
+    int parseResult = parseHeader(tmpHeader, &responseCode, &contentLenght);
+
+    // get content
+    int contentLen = (int) (strlen(response) - strlen(tmpHeader) - 2);   // content is located behind blank line; \r\n
+    if (contentLen > 0) {
+        if (contentLen != contentLenght) {  // compare length of body and Content-Length parameter
+            fprintf(stderr, "Content-Length and length of HTTP message body have different length");
+            parseResult = 0;
+        } else {
+            char *tmpContent = (char *) malloc(sizeof(char) * (contentLen + 1));
+            bzero(tmpContent, contentLen + 1);
+            strncpy(tmpContent, response + strlen(tmpHeader) + 2, contentLen);
+            *body = realloc(*body, sizeof(char) * (strlen(tmpContent) + 1));
+            strcpy(*body, tmpContent);
+            free(tmpContent);
+        }
+    }
+
+    free(tmpHeader);
+    return parseResult;
+}
+
+/**
+ * Function parses HTTP response header.
+ * Protocol version, status code, content-type, content-length are looked for.
+ *
+ * @param request char* received HTTP response
+ * @param responseCode int* where response code from response will be stored
+ * @param contentLength int* where the lenght of the reponse body will be stored
+ *
+ * @return 1 on success, 0 if an error occurred
+ */
+int parseHeader(char* request, int* responseCode, int* contentLength) {
+    int numberOfSpaces = 0;
+    char* tmpProtocolVersion = (char*) malloc(sizeof(char) * 1);
+    tmpProtocolVersion[0] = '\0';
+    char* tmpStatusCode = (char*) malloc(sizeof(char) * 1);
+    tmpStatusCode[0] = '\0';
+    char* tmpReasonPhrase = (char*) malloc(sizeof(char) * 1);
+    tmpReasonPhrase[0] = '\0';
+    int parseSuccess = 1;
+
+    // parse header to Protocol version and Status code
+    for (int i = 0; i < (int) strlen(request); i++) {
+        if (request[i] == ' ' || (request[i] == '\r' && (i+1 < (int) strlen(request)) && request[i+1] == '\n')) {
+            numberOfSpaces++;
+            continue;
+        }
+
+        if (numberOfSpaces == 0) {          // Protocol version is before first space
+            addCharToString(&tmpProtocolVersion, request[i]);
+        } else if (numberOfSpaces == 1) {   // Status code is behind first space
+            addCharToString(&tmpStatusCode, request[i]);
+        } /*else if (numberOfSpaces == 2) {   // Reason phrase is behind second space
+            addCharToString(&tmpReasonPhrase, request[i]);
+        }*/
+    }
+
+    // check either the both of Content-type, Content-length are present or neither of them
+    if (strstr(request, CONTENT_TYPE) != NULL) {
+        if (strstr(request, CONTENT_LENGTH) == NULL) {
+            fprintf(stderr, "Content-Length is absent in HTTP response header\n");
+            parseSuccess = 0;
+        } else {
+            char* contentLengthFromResponse = strstr(request, CONTENT_LENGTH);
+            long tmp = strtol(contentLengthFromResponse+strlen(CONTENT_LENGTH), NULL, 10);
+            *contentLength = (int) tmp;
+        }
+    } else {
+        if (strstr(request, CONTENT_LENGTH) != NULL) {
+            fprintf(stderr, "Content-Type is absent or is not of text/plain type in HTTP response header\n");
+            parseSuccess = 0;
+        }
+    }
+
+    // check if Protocol version is HTTP/1.1
+    if (strcmp(tmpProtocolVersion, PROTOCOL_VERSION) != 0) {
+        fprintf(stderr, "Bad protocol version; received=%s;  expected=%s\n", tmpProtocolVersion, PROTOCOL_VERSION);
+        parseSuccess = 0;
+    }
+
+    // change response code from string to int
+    long code = strtol(tmpStatusCode, NULL, 10);
+    *responseCode = (int) code;
+
+    free(tmpReasonPhrase);
+    free(tmpProtocolVersion);
+    free(tmpStatusCode);
+
+    return parseSuccess;
+}
+
+/**
+ * Function adds character to string. It reallocates string so that concatenation is possible.
+ *
+ * @param stringToBeAddedTo char** pointer to string that will be concatenated with new char
+ * @param addedChar char that will be added to the string
+ */
+void addCharToString(char** stringToBeAddedTo, char addedChar) {
+    char* tmp = (char*) malloc(sizeof(char) * (strlen(*stringToBeAddedTo) + 1));
+    strcpy(tmp, *stringToBeAddedTo);
+    tmp[strlen(*stringToBeAddedTo)] = '\0';
+
+    char* tmp2 = (char*) malloc(sizeof(char) * (strlen(tmp) + 2));
+    strcpy(tmp2, tmp);
+    tmp2[strlen(tmp)] = addedChar;
+    tmp2[strlen(tmp)+1] = '\0';
+    free(tmp);
+
+    *stringToBeAddedTo = realloc(*stringToBeAddedTo, sizeof(char) * (strlen(tmp2) + 1));
+    strcpy(*stringToBeAddedTo, tmp2);
+    free(tmp2);
 }
