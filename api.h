@@ -52,4 +52,10 @@ char* POST_BOARD = "POST /board/";
 char* DELETE_BOARD = "DELETE /board/";
 char* PUT_BOARD = "PUT /board/";
 
+char* RESPONSE_200 = "HTTP/1.1 200 OK\r\n";
+char* RESPONSE_201 = "HTTP/1.1 201 CREATED\r\n";
+char* RESPONSE_400 = "HTTP/1.1 400 BAD REQUEST\r\n";
+char* RESPONSE_404 = "HTTP/1.1 404 NOT FOUND\r\n";
+char* RESPONSE_409 = "HTTP/1.1 409 CONFLICT\r\n";
+
 #endif //PROJECT_API_H

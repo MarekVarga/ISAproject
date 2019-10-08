@@ -109,6 +109,12 @@ int putContentToBoardContent(struct BoardContent *boardContent, int id, char *co
 // function converts int to string
 void intToString(int number, char** result);
 
+// function prepares HTTP response
+void prepareHttpResponse(int responseCode, char *serverResponse, char **httpResponse);
+
+// function prepares HTTP respnse header
+void constructHttpHeader(char* statusLine, int contentLength, char** httpHeader);
+
 // function handles terminating signals
 void sig_handler(int signo);
 
@@ -470,8 +476,8 @@ void satisfyClient(const int* clientSocketDescriptor) {
     content[0] = '\0';
     int responseCode = 0;
     struct HttpHeader* httpHeader = createHttpHeader();
-    char* httpResponse = (char*) malloc(sizeof(char) * 1);
-    httpResponse[0] = '\0';
+    char* serverResponse = (char*) malloc(sizeof(char) * 1);
+    serverResponse[0] = '\0';
 
     // read request from client
     if ( read(*clientSocketDescriptor,request, BUFSIZ) < 0) {
@@ -485,56 +491,26 @@ void satisfyClient(const int* clientSocketDescriptor) {
     if (responseCode != RESPONSE_CODE_200) {
         // todo something went wrong during parsing
     }
-    responseCode = processRequest(httpHeader, content, &httpResponse);
-    if (responseCode != RESPONSE_CODE_200 || responseCode != RESPONSE_CODE_201) {
-        // todo something went wrong during parsing
-    }
-    fprintf(stdout, "response code: %d\n", responseCode);
-    fprintf(stdout, "response: %s\n", httpResponse);
+    responseCode = processRequest(httpHeader, content, &serverResponse);
 
-    // check if communication is in set protocol
-    /*if ( checkProtocol(request) != 0) {
-        fprintf(stderr, "Communication is in unknown protocol.\n");
+    /*fprintf(stdout, "response code: %d\n", responseCode);
+    fprintf(stdout, "response: %s\n", serverResponse);*/
+
+    // prepare response
+    prepareHttpResponse(responseCode, serverResponse, &serverResponse);
+
+    strcpy(response, serverResponse);
+    // send response
+    if ( write(*clientSocketDescriptor, response, strlen(response)) < 0) {
+        fprintf(stderr, "Writing to socket resulted in error.\n");
         close(*clientSocketDescriptor);
         exit(EXIT_CODE_1);
-    }*/
+    }
 
-    // find which option client wants
-    /*size_t pos = strstr(request, "***") - request;
-    memcpy(&requestOption, &request[21], 1);
-    memcpy(&login, &request[22], pos-22);
-
-    setpwent();
+    /*
     // if client was run with -n or -f argument
     if (requestOption != 'l') {
 
-        // find user
-        user = getpwnam(login);
-
-        if (user != NULL) {
-            if (requestOption == 'n') {
-                // return name of user according to login
-                strcpy(response,"**Protocol xvarga14**");
-                strcat(response, user->pw_gecos);
-                strcat(response, "***");
-            } else if (requestOption == 'f') {
-                // return working directory of user according to login
-                strcpy(response,"**Protocol xvarga14**");
-                strcat(response, user->pw_dir);
-                strcat(response, "***");
-            }
-        } else {
-            // inform client that no user was found for given login
-            sprintf(response, "**Protocol xvarga14**Entry was not found for given login.***");
-        }
-
-        // satisfy client
-        if ( write(*clientSocketDescriptor, response, strlen(response)) < 0) {
-            fprintf(stderr, "Writing to socket resulted in error.\n");
-            close(*clientSocketDescriptor);
-            exit(EXIT_CODE_1);
-        }
-        // if client was run with -l argument
     } else {
         while ( (user = getpwent()) != NULL) {
             memcpy(tmp, user->pw_name, strlen(login));
@@ -592,7 +568,7 @@ void satisfyClient(const int* clientSocketDescriptor) {
     endpwent();*/
 
     deleteHttpHeader(httpHeader);
-    free(httpResponse);
+    free(serverResponse);
     free(header);
     free(content);
 }
@@ -1335,4 +1311,77 @@ void intToString(int number, char** result) {
     *result = realloc(*result, sizeof(char) * (strlen(tmpResult)+1));
     strcpy(*result, tmpResult);
     free(tmpResult);
+}
+
+/**
+ * Function prepares HTTP response.
+ * It creates an appropriate HTTP header based on response code and server response.
+ *
+ * @param responseCode int number of response code after server handled HTTP request
+ * @param serverResponse char* containing response after server handled HTTP request
+ * @param httpResponse pointer to char* where prepared HTTP response will be strored
+ */
+void prepareHttpResponse(int responseCode, char* serverResponse, char** httpResponse) {
+    char* httpHeader = (char*) malloc(sizeof(char) * 1);
+    httpHeader[0] = '\0';
+
+    switch (responseCode) {
+        case 200:   // OK
+            constructHttpHeader(RESPONSE_200, (int) strlen(serverResponse), &httpHeader);
+            break;
+        case 201:   // CREATED
+            constructHttpHeader(RESPONSE_201, (int) strlen(serverResponse), &httpHeader);
+            break;
+        case 400:   // BAD REQUEST
+            constructHttpHeader(RESPONSE_400, (int) strlen(serverResponse), &httpHeader);
+            break;
+        case 404:   // NOT FOUND
+            constructHttpHeader(RESPONSE_404, (int) strlen(serverResponse), &httpHeader);
+            break;
+        case 409:   // CONFLICT
+            constructHttpHeader(RESPONSE_409, (int) strlen(serverResponse), &httpHeader);
+            break;
+        default:
+            fprintf(stderr, "Unexpected response code: %d\n", responseCode);
+            exit(EXIT_CODE_1);
+    }
+
+    char* tmpResponse = (char*) malloc(sizeof(char) * (strlen(httpHeader) + strlen(serverResponse) + 1));
+    strcpy(tmpResponse, httpHeader);
+    strcat(tmpResponse, serverResponse);
+
+    *httpResponse = realloc(httpResponse, sizeof(char) * (strlen(tmpResponse) + 1));
+    strcpy(*httpResponse, tmpResponse);
+    free(tmpResponse);
+    free(httpHeader);
+}
+
+/**
+ * Function constructs HTTP header.
+ * First header line is called status, after that content-type and content-length line respectively follows.
+ * Each line is separated by CRLF and then blank line, also CRLF, is appended at the end of it.
+ *
+ * @param statusLine char* first line of HTTP response header, look in api.h for predefined ones
+ * @param contentLength int length of the content that will follow the header
+ * @param httpHeader pointer to char* where new HTTP header will be stored
+ */
+void constructHttpHeader(char* statusLine, int contentLength, char** httpHeader) {
+    char* contentLengthAsString = (char*) malloc(sizeof(char) * 1);
+    contentLengthAsString[0] = '\0';
+    intToString(contentLength, &contentLengthAsString);
+
+    char* tmpHeader = (char*) malloc(sizeof(char) * (strlen(statusLine) + strlen(CONTENT_TYPE)+ + strlen(CONTENT_LENGTH) + strlen(contentLengthAsString) + 9)); // 4* '\r, 4* '\n', '\0'
+    strcpy(tmpHeader, *httpHeader);
+    strcat(tmpHeader, "\r\n");
+    strcat(tmpHeader, CONTENT_TYPE);
+    strcat(tmpHeader, "\r\n");
+    strcat(tmpHeader, CONTENT_LENGTH);
+    strcat(tmpHeader, contentLengthAsString);
+    strcat(tmpHeader, "\r\n");
+    strcat(tmpHeader, "\r\n");  // blank line after HTTP ending
+
+    *httpHeader = realloc(httpHeader, sizeof(char) * (strlen(tmpHeader) + 1));
+    strcpy(*httpHeader, tmpHeader);
+    free(tmpHeader);
+    free(contentLengthAsString);
 }
