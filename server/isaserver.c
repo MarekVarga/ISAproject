@@ -501,6 +501,7 @@ void satisfyClient(const int* clientSocketDescriptor) {
 
     strcpy(response, serverResponse);
     // send response
+    // todo split too long response?
     if ( write(*clientSocketDescriptor, response, strlen(response)) < 0) {
         fprintf(stderr, "Writing to socket resulted in error.\n");
         close(*clientSocketDescriptor);
@@ -575,7 +576,7 @@ void satisfyClient(const int* clientSocketDescriptor) {
 
 /**
  * Function parses HTTP request.
- * First it parses header and prints it on stderr.
+ * First it parses header.
  * Then it parses content.
  *
  * @param request char* received request
@@ -598,7 +599,7 @@ int parseRequest(char* request, struct HttpHeader *header, char** content) {
         return RESPONSE_CODE_404;
     }
 
-    // parse header from content
+    // separate header from content
     int headerLen = (int) (strlen(request) - strlen(headerEnd));
     char* tmpHeader = (char*) malloc(sizeof(char) * (headerLen + 3)); // \r, \n, \0
     bzero(tmpHeader, headerLen + 3);
@@ -608,8 +609,8 @@ int parseRequest(char* request, struct HttpHeader *header, char** content) {
     tmpHeader[headerLen] = '\r';
     tmpHeader[headerLen+1] = '\n';
     tmpHeader[headerLen+2] = '\0';
-    // print header to stderr
-    fprintf(stderr, "Request header: %s\n", tmpHeader);
+
+    // parse header
     parseResult = parseHeader(tmpHeader, &method, &url);
 
     header->method = realloc(header->method, sizeof(char) * (strlen(method) + 1));
@@ -1060,6 +1061,7 @@ int fillResponseWithBoardContent(struct BoardContent *boardContent, char* boardN
  *
  * @return 201 on success or 404 on failure
  */
+ // todo post multiple content to single id
 int apiPostToBoard(char *boardName, char *content, char **response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
         *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
@@ -1350,7 +1352,7 @@ void prepareHttpResponse(int responseCode, char* serverResponse, char** httpResp
     strcpy(tmpResponse, httpHeader);
     strcat(tmpResponse, serverResponse);
 
-    *httpResponse = realloc(httpResponse, sizeof(char) * (strlen(tmpResponse) + 1));
+    *httpResponse = realloc(*httpResponse, sizeof(char) * (strlen(tmpResponse) + 1));
     strcpy(*httpResponse, tmpResponse);
     free(tmpResponse);
     free(httpHeader);
@@ -1366,22 +1368,31 @@ void prepareHttpResponse(int responseCode, char* serverResponse, char** httpResp
  * @param httpHeader pointer to char* where new HTTP header will be stored
  */
 void constructHttpHeader(char* statusLine, int contentLength, char** httpHeader) {
-    char* contentLengthAsString = (char*) malloc(sizeof(char) * 1);
-    contentLengthAsString[0] = '\0';
-    intToString(contentLength, &contentLengthAsString);
+    if (contentLength > 0) {    // http response will contain body, content-type and content-length need to be appended
+        char *contentLengthAsString = (char *) malloc(sizeof(char) * 1);
+        contentLengthAsString[0] = '\0';
+        intToString(contentLength, &contentLengthAsString);
 
-    char* tmpHeader = (char*) malloc(sizeof(char) * (strlen(statusLine) + strlen(CONTENT_TYPE)+ + strlen(CONTENT_LENGTH) + strlen(contentLengthAsString) + 9)); // 4* '\r, 4* '\n', '\0'
-    strcpy(tmpHeader, *httpHeader);
-    strcat(tmpHeader, "\r\n");
-    strcat(tmpHeader, CONTENT_TYPE);
-    strcat(tmpHeader, "\r\n");
-    strcat(tmpHeader, CONTENT_LENGTH);
-    strcat(tmpHeader, contentLengthAsString);
-    strcat(tmpHeader, "\r\n");
-    strcat(tmpHeader, "\r\n");  // blank line after HTTP ending
+        char *tmpHeader = (char *) malloc(sizeof(char) * (strlen(statusLine) + strlen(CONTENT_TYPE) + +strlen(CONTENT_LENGTH) + strlen(contentLengthAsString) + 7)); // 3* '\r, 3* '\n', '\0'
+        strcpy(tmpHeader, statusLine);
+        strcat(tmpHeader, CONTENT_TYPE);
+        strcat(tmpHeader, "\r\n");
+        strcat(tmpHeader, CONTENT_LENGTH);
+        strcat(tmpHeader, contentLengthAsString);
+        strcat(tmpHeader, "\r\n");
+        strcat(tmpHeader, "\r\n");  // blank line after HTTP ending
 
-    *httpHeader = realloc(httpHeader, sizeof(char) * (strlen(tmpHeader) + 1));
-    strcpy(*httpHeader, tmpHeader);
-    free(tmpHeader);
-    free(contentLengthAsString);
+        *httpHeader = realloc(*httpHeader, sizeof(char) * (strlen(tmpHeader) + 1));
+        strcpy(*httpHeader, tmpHeader);
+        free(tmpHeader);
+        free(contentLengthAsString);
+    } else {        // http response will be without body
+        char *tmpHeader = (char *) malloc(sizeof(char) * (strlen(statusLine) + 3)); // 2* '\r, 2* '\n', '\0'
+        strcpy(tmpHeader, statusLine);
+        strcat(tmpHeader, "\r\n");  // blank line after HTTP ending
+
+        *httpHeader = realloc(*httpHeader, sizeof(char) * (strlen(tmpHeader) + 1));
+        strcpy(*httpHeader, tmpHeader);
+        free(tmpHeader);
+    }
 }
