@@ -667,10 +667,8 @@ void findServer(char **hostname, const int *portNumber, struct hostent* server, 
  *
  * @param clientSocket socket descriptor
  * @param serverAddress socket address structure of server
- * @param n -n argument of program
- * @param f -f argument of program
- * @param l -l argument of program
- * @param login login of sought user
+ * @param apiCommand pointer to char* where api command will be stored
+ * @param hostname pointer to char* where hostname will be stored
  */
 void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, char** apiCommand, char** hostname){
     char* httpRequest = (char*) malloc(sizeof(char) * 1);
