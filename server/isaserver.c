@@ -1219,21 +1219,23 @@ int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **r
         toBeDeletedBoardContent->nextContent = NULL;
         deleteBoardContent(toBeDeletedBoardContent);
     }
-    struct BoardContent* first = tmpContent;
-    do {
-        if (foundToBeDeletedBoardContent == 1) {    // lower id for each content after deleted one
-            first->id--;
-        } else {
-            if (first->nextContent->id == id) {
-                foundToBeDeletedBoardContent = 1;
-                struct BoardContent* toBeDeletedBoardContent = first->nextContent;
-                first->nextContent = toBeDeletedBoardContent->nextContent;
-                toBeDeletedBoardContent->nextContent = NULL;
-                deleteBoardContent(toBeDeletedBoardContent);
+    if (tmpContent != NULL) {
+        struct BoardContent *first = tmpContent;
+        do {
+            if (foundToBeDeletedBoardContent == 1) {    // lower id for each content after deleted one
+                first->id--;
+            } else {
+                if (first->nextContent->id == id) {
+                    foundToBeDeletedBoardContent = 1;
+                    struct BoardContent *toBeDeletedBoardContent = first->nextContent;
+                    first->nextContent = toBeDeletedBoardContent->nextContent;
+                    toBeDeletedBoardContent->nextContent = NULL;
+                    deleteBoardContent(toBeDeletedBoardContent);
+                }
             }
-        }
-        first = first->nextContent;
-    } while(first != NULL);
+            first = first->nextContent;
+        } while (first != NULL);
+    }
 
     *boardContent = tmpContent;
     return RESPONSE_CODE_200;
