@@ -80,7 +80,7 @@ int apiDeleteBoard(char *boardName, char **response);
 int apiGetBoard(char* boardName, char** response);
 
 // function fills response with a content of a board
-int fillResponseWithBoardContent(struct BoardContent *boardContent, char **response);
+int fillResponseWithBoardContent(struct BoardContent *boardContent, char *boardName, char **response);
 
 // function puts content to a board
 int apiPostToBoard(char *boardName, char *content, char **response);
@@ -105,6 +105,9 @@ int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **r
 
 // function over board content at id with new content
 int putContentToBoardContent(struct BoardContent *boardContent, int id, char *content, char **response);
+
+// function converts int to string
+void intToString(int number, char** result);
 
 // function handles terminating signals
 void sig_handler(int signo);
@@ -1014,7 +1017,7 @@ int apiGetBoard(char* boardName, char** response) {
                 strcpy(*response, "No content for this board exits");
                 return RESPONSE_CODE_404;
             } else{
-                return fillResponseWithBoardContent(board->content, response);  // fill response with board's content
+                return fillResponseWithBoardContent(board->content, board->name, response);  // fill response with board's content
             }
         }
         board = board->nextBoard;
@@ -1031,9 +1034,12 @@ int apiGetBoard(char* boardName, char** response) {
  *
  * @return 200 on success or 404 on failure
  */
-int fillResponseWithBoardContent(struct BoardContent* boardContent, char** response) {
-    char* tmpResponse = (char*) malloc(sizeof(char) * 1);
-    tmpResponse[0] = '\0';
+int fillResponseWithBoardContent(struct BoardContent *boardContent, char* boardName, char** response) {
+    // add board name to response
+    char* tmpResponse = (char*) malloc(sizeof(char) * (strlen(boardName) + 2)); // \n \0
+    strcpy(tmpResponse, boardName);
+    tmpResponse[strlen(boardName)] = '\n';
+    tmpResponse[strlen(boardName)+1] = '\0';
     char* tmp = (char*) malloc(sizeof(char) * 1);
     tmp[0] ='\0';
     struct BoardContent* tmpContent = boardContent;
@@ -1042,10 +1048,20 @@ int fillResponseWithBoardContent(struct BoardContent* boardContent, char** respo
     do {
         tmp = realloc(tmp, sizeof(char) * (strlen(tmpResponse) + 1));
         strcpy(tmp, tmpResponse);
-        tmpResponse = realloc(tmpResponse, sizeof(char) * (strlen(tmp) + strlen(tmpContent->content) + 1));
+        char* idAsString = (char*) malloc(sizeof(char) * 1);
+        idAsString[0] = '\0';
+        intToString(tmpContent->id, &idAsString);
+        tmpResponse = realloc(tmpResponse, sizeof(char) * (strlen(tmp) + strlen(tmpContent->content) + strlen(idAsString) + 5)); // '.', ' ', '.', '\n', '\0'
+        bzero(tmpResponse, strlen(tmp) + strlen(tmpContent->content) + strlen(idAsString) + 5);
         strcpy(tmpResponse, tmp);
+        strcat(tmpResponse, idAsString);
+        tmpResponse[strlen(tmp)+strlen(idAsString)] = '.';
+        tmpResponse[strlen(tmp)+strlen(idAsString)+1] = ' ';
         strcat(tmpResponse, tmpContent->content);
-
+        tmpResponse[strlen(idAsString)+2+(strlen(tmp)+strlen(tmpContent->content))] = '.';
+        tmpResponse[strlen(idAsString)+2+(strlen(tmp)+strlen(tmpContent->content))+1] = '\n';
+        tmpResponse[strlen(idAsString)+2+(strlen(tmp)+strlen(tmpContent->content))+2] = '\0';
+        free(idAsString);
         tmpContent = tmpContent->nextContent;
     } while (tmpContent != NULL);
 
@@ -1281,4 +1297,34 @@ void addCharToString(char** stringToBeAddedTo, char addedChar) {
     *stringToBeAddedTo = realloc(*stringToBeAddedTo, sizeof(char) * (strlen(tmp2) + 1));
     strcpy(*stringToBeAddedTo, tmp2);
     free(tmp2);
+}
+
+void intToString(int number, char** result) {
+    char const digit[] = "0123456789";
+    char* tmpResult = (char*) malloc(sizeof(char) * 1);
+    tmpResult[0] = '\0';
+
+    int i = number;
+    if (number < 0) {
+        tmpResult = realloc(tmpResult, sizeof(char) * 2);
+        tmpResult[0] = '-';
+        tmpResult[1] = '\0';
+        i *= 1;
+    }
+    int numLen = 0;
+    do {
+        numLen++;
+        i /= 10;
+    } while (i);
+    int isNegative = (int) strlen(tmpResult);
+    tmpResult = realloc(tmpResult, sizeof(char) * (isNegative + numLen + 1));
+    bzero(tmpResult, isNegative+numLen+1);
+    do {
+        tmpResult[--numLen] = digit[number%10];
+        number /= 10;
+    } while (number);
+
+    *result = realloc(*result, sizeof(char) * (strlen(tmpResult)+1));
+    strcpy(*result, tmpResult);
+    free(tmpResult);
 }
