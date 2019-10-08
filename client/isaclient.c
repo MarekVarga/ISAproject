@@ -4,11 +4,8 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <ctype.h>
-#include <signal.h>
-#include <pwd.h>
 
 #include "isaclient.h"
 //#include "api.h"
@@ -255,7 +252,7 @@ void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
 int countChar(char* haystack, const char needle) {
     int occurrences = 0;
 
-    for (int i = 0; i < strlen(haystack); i++) {
+    for (int i = 0; i < (int) strlen(haystack); i++) {
         if (haystack[i] == needle) {
             occurrences++;
         }
@@ -278,7 +275,7 @@ void parseCommandForName(char* command, char** name) {
     char* tmp = (char*) malloc(sizeof(char) * 1);
     tmp[0] = '\0';
 
-    for (int i = 0; i < strlen(command); i++) {
+    for (int i = 0; i < (int) strlen(command); i++) {
         if (numberOfSpaces >= 2) {
             // <name> part of command is located behind second space
             if (command[i] != '\0') {
@@ -320,7 +317,7 @@ void parseCommandForNameAndId(char* command, char **name, char **id) {
     char* tmp = (char*)  malloc(sizeof(char) * 1);
     tmp[0] = '\0';
 
-    for (int i = 0; i < strlen(command); i++) {
+    for (int i = 0; i < (int) strlen(command); i++) {
         if (command[i] == ' ') {
             numberOfSpaces++;
             continue;
@@ -377,7 +374,7 @@ void parseCommandForNameAndIdAndContent(char* command, char **name, char **id, c
     char* tmp = (char*)  malloc(sizeof(char) * 1);
     tmp[0] = '\0';
 
-    for (int i = 0; i < strlen(command); i++) {
+    for (int i = 0; i < (int) strlen(command); i++) {
         if (command[i] == ' ') {
             numberOfSpaces++;
             if (numberOfSpaces < 4) {
@@ -446,7 +443,7 @@ void parseCommandForNameAndContent(char* command, char** name, char** content) {
     char* tmp = (char*)  malloc(sizeof(char) * 1);
     tmp[0] = '\0';
 
-    for (int i = 0; i < strlen(command); i++) {
+    for (int i = 0; i < (int) strlen(command); i++) {
         if (command[i] == ' ') {
             numberOfSpaces++;
             if (numberOfSpaces < 3) {
@@ -681,7 +678,7 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     httpRequest[0] = '\0';
     prepareHttpRequest(*apiCommand, *hostname, &httpRequest);
 
-    ssize_t r = 0;
+    //ssize_t r = 0;
     char request[BUFSIZ];
     char response[BUFSIZ];
     char message [BUFSIZ];
