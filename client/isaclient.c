@@ -33,7 +33,7 @@ void parseCommandForNameAndIdAndContent(char* command, char** name, char** id, c
 void parseCommandForNameAndContent(char* command, char** name, char** content);
 
 // function concatenates name and id for api
-void concatNameAndId(char* name, char* id);
+void concatNameAndId(char *name, char *id, char **result);
 
 // function creates HTTP request without body
 void createRequestWithoutBody(char** httpRequest, char* method, char* url, char* hostname);
@@ -180,7 +180,7 @@ void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
             char* content = (char*) malloc(sizeof(char) * 1);
             content[0] = '\0';
             parseCommandForNameAndIdAndContent(command, &name, &id, &content);
-            concatNameAndId(name, id);
+            concatNameAndId(name, id, &name);
             createRequestWithBody(httpRequest, PUT_BOARD, name, hostname, content);
             free(content);
             free(id);
@@ -192,7 +192,7 @@ void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
             char* id = (char*) malloc(sizeof(char) * 1);
             id[0] = '\0';
             parseCommandForNameAndId(command, &name, &id);
-            concatNameAndId(name, id);
+            concatNameAndId(name, id, &name);
             createRequestWithoutBody(httpRequest, DELETE_BOARD, name, hostname);
             free(id);
             free(name);
@@ -488,24 +488,26 @@ void parseCommandForNameAndContent(char* command, char** name, char** content) {
 /**
  * Function concatenates name and id obtained from <command>.
  * In concatenation, '/' needs to inserted in between them.
- * The result is then stored in name parameter.
+ * The result is then stored in result parameter.
  *
  * @param name char* name obtained from <command>
  * @param id char* id obtained from <command>
+ * @param result pointer to char* where result is stored
  */
-void concatNameAndId(char* name, char* id) {
-    size_t two = 2;
-    char* tmp = malloc(sizeof(char) * (strlen(name) + strlen(id) + two));
+void concatNameAndId(char* name, char* id, char** result) {
+    char* tmp = malloc(sizeof(char) * (strlen(name) + strlen(id) + 2));
     if (tmp == NULL) {
         exit(EXIT_CODE_1);
     }
 
     strcpy(tmp, name);
     tmp[strlen(name)] = '/';
+    tmp[strlen(name)+1] = '\0';
     strcat(tmp, id);
+    tmp[strlen(name)+strlen(id)+1] = '\0';
 
-    name = realloc(name, sizeof(char) * (strlen(tmp) + 1));
-    strcpy(name, tmp);
+    *result = realloc(*result, sizeof(char) * (strlen(tmp) + 1));
+    strcpy(*result, tmp);
     free(tmp);
 }
 
@@ -689,8 +691,8 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     parseResponse(response, &tmpHeader, &tmpBody);
 
     // print header (without blank line) and content
-    fprintf(stderr, "HTTP response header:\r%s", tmpHeader);
-    fprintf(stdout, "HTTP response body:\r%s\n", tmpBody);
+    fprintf(stderr, "HTTP response header:\n%s", tmpHeader);
+    fprintf(stdout, "HTTP response body:\n%s\n", tmpBody);
 
     // if client was run with -n or -f argument
     /*if ( *l == 0) {
