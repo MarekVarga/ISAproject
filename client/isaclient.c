@@ -746,6 +746,8 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
 
     }*/
 
+    free(tmpHeader);
+    free(tmpBody);
     free(httpRequest);
     close(*clientSocket);
 }
