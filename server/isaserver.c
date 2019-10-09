@@ -53,10 +53,10 @@ void establishConnection(int portNumber, struct sockaddr_in* serverAddress);
 void satisfyClient(const int* clientSocketDescriptor);
 
 // function parses request
-int parseRequest(char* request, struct HttpHeader *header, char** content);
+int parseRequest(char *request, struct HttpHeader *header, char **content, char **errorResponse);
 
 // function parses header
-int parseHeader(char* header, char** method, char** url);
+int parseHeader(char* header, char** method, char** url, int* contentLength, char** errorResponse);
 
 // function process request by doing something with boards
 int processRequest(struct HttpHeader *httpHeader, char *content, char **response);
@@ -391,6 +391,8 @@ struct HttpHeader* createHttpHeader() {
         header->host[0] = '\0';
     }
 
+    header->contentLength = 0;
+
     return header;
 }
 
@@ -487,11 +489,10 @@ void satisfyClient(const int* clientSocketDescriptor) {
     }
 
     // parse request
-    responseCode = parseRequest(request, httpHeader, &content);
-    if (responseCode != RESPONSE_CODE_200) {
-        // todo something went wrong during parsing
+    responseCode = parseRequest(request, httpHeader, &content, &serverResponse);
+    if (responseCode == RESPONSE_CODE_200) {    // header was parsed successfully
+        responseCode = processRequest(httpHeader, content, &serverResponse);
     }
-    responseCode = processRequest(httpHeader, content, &serverResponse);
 
     /*fprintf(stdout, "response code: %d\n", responseCode);
     fprintf(stdout, "response: %s\n", serverResponse);*/
@@ -585,7 +586,7 @@ void satisfyClient(const int* clientSocketDescriptor) {
  *
  * @return return code 200 if everything was OK otherwise 404 is returned of parsing error.
  */
-int parseRequest(char* request, struct HttpHeader *header, char** content) {
+int parseRequest(char* request, struct HttpHeader* header, char** content, char** errorResponse) {
     char* method = (char*) malloc(sizeof(char) * 1);
     method[0] = '\0';
     char* url = (char*) malloc(sizeof(char) * 1);
@@ -595,7 +596,7 @@ int parseRequest(char* request, struct HttpHeader *header, char** content) {
     // check if blank line exists
     char* headerEnd = strstr(request, "\r\n\r\n");  // header and content is separated by blank line
     if (headerEnd == NULL) {
-        fprintf(stderr, "Request is badly formatted");
+        sprintf(*errorResponse, "Request is badly formatted");
         return RESPONSE_CODE_404;
     }
 
@@ -611,22 +612,29 @@ int parseRequest(char* request, struct HttpHeader *header, char** content) {
     tmpHeader[headerLen+2] = '\0';
 
     // parse header
-    parseResult = parseHeader(tmpHeader, &method, &url);
+    int contentLength = 0;
+    parseResult = parseHeader(tmpHeader, &method, &url, &contentLength, errorResponse);
 
     header->method = realloc(header->method, sizeof(char) * (strlen(method) + 1));
     strcpy(header->method, method);
     header->url = realloc(header->url, sizeof(char) * (strlen(url) + 1));
     strcpy(header->url, url);
+    header->contentLength = contentLength;
 
     // get content
     int contentLen = (int) (strlen(request) - strlen(tmpHeader) - 2);   // content is located behind blank line; \r\n
     if (contentLen > 0) {
-        char* tmpContent = (char*) malloc(sizeof(char) * (contentLen + 1));
-        bzero(tmpContent, contentLen+1);
-        strncpy(tmpContent, request+strlen(tmpHeader)+2, contentLen);
-        *content = realloc(*content, sizeof(char) * (strlen(tmpContent) + 1));
-        strcpy(*content, tmpContent);
-        free(tmpContent);
+        if (contentLen != header->contentLength) {
+            sprintf(*errorResponse, "Content-Length and length of HTTP message body have different length");
+            parseResult = RESPONSE_CODE_404;
+        } else {
+            char *tmpContent = (char *) malloc(sizeof(char) * (contentLen + 1));
+            bzero(tmpContent, contentLen + 1);
+            strncpy(tmpContent, request + strlen(tmpHeader) + 2, contentLen);
+            *content = realloc(*content, sizeof(char) * (strlen(tmpContent) + 1));
+            strcpy(*content, tmpContent);
+            free(tmpContent);
+        }
     }
 
     free(tmpHeader);
@@ -645,7 +653,7 @@ int parseRequest(char* request, struct HttpHeader *header, char** content) {
  *
  * @return response code 200 if everything was OK, otherwise 404 is returned
  */
-int parseHeader(char* header, char** method, char** url) {
+int parseHeader(char* header, char** method, char** url, int* contentLength, char** errorResponse) {
     char* tmpMethod = (char*) malloc(sizeof(char) * 1);
     tmpMethod[0] = '\0';
     char* tmpUrl = (char*) malloc(sizeof(char) * 1);
@@ -678,8 +686,25 @@ int parseHeader(char* header, char** method, char** url) {
 
     // compare protocol version
     if (strcmp(tmpProtocolVersion, PROTOCOL_VERSION) != 0) {
-        fprintf(stderr, "Bad protocol version; provided=%s\n required=%s\n", tmpProtocolVersion, PROTOCOL_VERSION);
+        sprintf(*errorResponse, "Bad protocol version; provided=%s required=%s\n", tmpProtocolVersion, PROTOCOL_VERSION);
         headerParsingResult = RESPONSE_CODE_404;
+    }
+
+    // check either the both of Content-type, Content-length are present or neither of them
+    if (strstr(header, CONTENT_TYPE) != NULL) {
+        if (strstr(header, CONTENT_LENGTH) == NULL) {
+            sprintf(*errorResponse, "Content-Length is absent in HTTP response header\n");
+            headerParsingResult = RESPONSE_CODE_404;
+        } else {
+            char* contentLengthFromResponse = strstr(header, CONTENT_LENGTH);
+            long tmp = strtol(contentLengthFromResponse+strlen(CONTENT_LENGTH), NULL, 10);
+            *contentLength = (int) tmp;
+        }
+    } else {
+        if (strstr(header, CONTENT_LENGTH) != NULL) {
+            sprintf(*errorResponse, "Content-Type is absent or is not of text/plain type in HTTP response header\n");
+            headerParsingResult = RESPONSE_CODE_404;
+        }
     }
 
     free(tmpMethod);
@@ -712,11 +737,11 @@ int processRequest(struct HttpHeader* httpHeader, char* content, char** response
         } else if (strcmp(httpHeader->method, "POST") == 0) {   // POST /boards/<name>
             int boardNameLen = (int) (strlen(httpHeader->url) - strlen("/boards/"));
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
-            responseCode = apiCreateNewBoard(boardName, NULL);
+            responseCode = apiCreateNewBoard(boardName, response);
         } else if (strcmp(httpHeader->method, "DELETE") == 0) { // DELETE /boards/<name>
             int boardNameLen = (int) (strlen(httpHeader->url) - strlen("/boards/"));
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
-            responseCode = apiDeleteBoard(boardName, NULL);
+            responseCode = apiDeleteBoard(boardName, response);
         } else {    // unknown HTTP method
             char* invalidMethod = "Unknown method for /boards manipulation";
             *response = realloc(*response, sizeof(char) * (strlen(invalidMethod) + 1));
@@ -729,9 +754,16 @@ int processRequest(struct HttpHeader* httpHeader, char* content, char** response
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/board/"));
             responseCode = apiGetBoard(boardName, response);
         } else if (strcmp(httpHeader->method, "POST") == 0) {   // POST /board/<name> <content>
-            int boardNameLen = (int) (strlen(httpHeader->url) - strlen("/board/"));
-            parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/board/"));
-            responseCode = apiPostToBoard(boardName, content, response);
+            if (httpHeader->contentLength == 0) {   // check content length of POST request
+                char* invalidLength = "Content-Length of POST request cannot be zero";
+                *response = realloc(*response, sizeof(char) * (strlen(invalidLength) + 1));
+                strcpy(*response, invalidLength);
+                responseCode = RESPONSE_CODE_400;
+            } else {
+                int boardNameLen = (int) (strlen(httpHeader->url) - strlen("/board/"));
+                parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/board/"));
+                responseCode = apiPostToBoard(boardName, content, response);
+            }
         } else if (strcmp(httpHeader->method, "DELETE") == 0) { // DELETE /board/<name>/<id>
             int boardNameAndIdLen = (int) (strlen(httpHeader->url) - strlen("/board/"));
             int id = 0;
@@ -740,11 +772,19 @@ int processRequest(struct HttpHeader* httpHeader, char* content, char** response
                 responseCode = apiDeleteContentFromBoard(boardName, id, response);
             }
         } else if (strcmp(httpHeader->method, "PUT") == 0) {    // PUT /board/<name>/<id> <content>
-            int boardNameAndIdLen = (int) (strlen(httpHeader->url) - strlen("/board/"));
-            int id = 0;
-            responseCode = parseBoardNameAndIdFromUrl(httpHeader->url, &boardName, &id, boardNameAndIdLen, strlen("/board/"));
-            if (responseCode != RESPONSE_CODE_404) {
-                responseCode = apiPutContentToBoard(boardName, id, content, response);
+            if (httpHeader->contentLength == 0) {   // check content length of PUT request
+                char* invalidLength = "Content-Length of PUT request cannot be zero";
+                *response = realloc(*response, sizeof(char) * (strlen(invalidLength) + 1));
+                strcpy(*response, invalidLength);
+                responseCode = RESPONSE_CODE_400;
+            } else {
+                int boardNameAndIdLen = (int) (strlen(httpHeader->url) - strlen("/board/"));
+                int id = 0;
+                responseCode = parseBoardNameAndIdFromUrl(httpHeader->url, &boardName, &id, boardNameAndIdLen,
+                                                          strlen("/board/"));
+                if (responseCode != RESPONSE_CODE_404) {
+                    responseCode = apiPutContentToBoard(boardName, id, content, response);
+                }
             }
         } else {    // unknown HTTP method
             char* invalidMethod = "Unknown method for /board manipulation";

@@ -30,6 +30,7 @@ struct HttpHeader {
     char* method;
     char* url;
     char* host;
+    int contentLength;
 };
 
 char* GET_BOARDS = "GET /boards";
