@@ -118,6 +118,9 @@ void constructHttpHeader(char* statusLine, int contentLength, char** httpHeader)
 // function handles terminating signals
 void sig_handler(int signo);
 
+// function performs cleanup at exit
+void atExitFunction();
+
 int main(int argc, char* argv[]) {
     int port, clientSocketDescriptor;
     struct sockaddr_in serverAddress, clientAddress;
@@ -134,6 +137,7 @@ int main(int argc, char* argv[]) {
         //exit(EXIT_CODE_1);
     }
     // " copied from: https://www.thegeekstuff.com/2012/03/catch-signals-sample-c-code
+    atexit(atExitFunction);
 
     // get arguments
     port = checkArgs(argc, argv);
@@ -163,9 +167,6 @@ int main(int argc, char* argv[]) {
         i++;
     }
 
-    close(socketDescriptor);
-    deleteBoardsRecursively();
-    free(boards);
     exit(EXIT_CODE_0);
 }
 
@@ -181,12 +182,18 @@ void sig_handler(int signo) {
         fprintf(stderr, "received SIGINT");
     }
 
-    close(socketDescriptor);
-    deleteBoardsRecursively();
-    free(boards);
     exit(EXIT_CODE_0);
 }
 // " copied from: https://www.thegeekstuff.com/2012/03/catch-signals-sample-c-code
+
+/**
+ * Function deletes all the boards whenever exit() is called.
+ */
+void atExitFunction() {
+    close(socketDescriptor);
+    deleteBoardsRecursively();
+    free(boards);
+}
 
 /**
  * Function checks arguments with getopt(). On success it returns port number.
@@ -725,7 +732,6 @@ int parseHeader(char* header, char** method, char** url, int* contentLength, cha
  * @return 200 on GET/DELETE/PUT method success, 201 on POST method success, 400 if there is no required content,
  *          409 if created board/boardContent already exits, 404 on some other errors
  */
- // todo check content length
 int processRequest(struct HttpHeader* httpHeader, char* content, char** response) {
     int responseCode = 0;
     char* boardName = (char*) malloc(sizeof(char) * 1);
