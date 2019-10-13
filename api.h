@@ -5,7 +5,9 @@
 #ifndef PROJECT_API_H
 #define PROJECT_API_H
 
-char* PROTOCOL_VERSION = "HTTP/1.1";
+int MAX_NUMBER_OF_PENDING_CONNECTIONS = 10;
+
+char* HTTP_VERSION = "HTTP/1.1";
 char* CONTENT_TYPE = "Content-Type: text/plain";
 char* CONTENT_LENGTH = "Content-Length: ";
 

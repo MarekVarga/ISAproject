@@ -116,7 +116,7 @@ void prepareHttpResponse(int responseCode, char *serverResponse, char **httpResp
 void constructHttpHeader(char* statusLine, int contentLength, char** httpHeader);
 
 // function handles terminating signals
-void sig_handler(int signo);
+void signalHandler(int signalNumber);
 
 // function performs cleanup at exit
 void atExitFunction();
@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
 
     // handle terminating signals
     // "
-    if (signal(SIGINT, sig_handler) == SIG_ERR) {
+    if (signal(SIGINT, signalHandler) == SIG_ERR) {
         fprintf(stderr, "Cannot catch SIGINT\n");
         //exit(EXIT_CODE_1);
     }
@@ -148,8 +148,7 @@ int main(int argc, char* argv[]) {
     socklen_t clientAddressLength = sizeof(clientAddress);
     // " inspired by: Rysavy Ondrej - DemoTcp/server.c
 
-    int i = 0;
-    while (i < 5) {
+    while (1) {
         // call to accept function
         // "
         clientSocketDescriptor = accept(socketDescriptor, (struct sockaddr *) &clientAddress, &clientAddressLength);
@@ -163,8 +162,6 @@ int main(int argc, char* argv[]) {
 
         satisfyClient(&clientSocketDescriptor);
         close(clientSocketDescriptor);  // close connection to client
-
-        i++;
     }
 
     exit(EXIT_CODE_0);
@@ -174,11 +171,11 @@ int main(int argc, char* argv[]) {
  * Function handles terminating signals.
  * After such signal was caught, boards structure is deleted.
  *
- * @param signo int signal number
+ * @param signalNumber int signal number
  */
  // "
-void sig_handler(int signo) {
-    if (signo == SIGINT) {
+void signalHandler(int signalNumber) {
+    if (signalNumber == SIGINT) {
         fprintf(stderr, "received SIGINT");
     }
 
@@ -453,7 +450,7 @@ void establishConnection(int portNumber, struct sockaddr_in* serverAddress) {
     // " inspired by: Rysavy Ondrej - DemoTcp/server.c
 
     // call to listen function
-    if ( listen(socketDescriptor,10) < 0 ) {
+    if ( listen(socketDescriptor,MAX_NUMBER_OF_PENDING_CONNECTIONS) < 0 ) {
         fprintf(stderr, "Trying to listen resulted in error.\n");
         close(socketDescriptor);
         exit(EXIT_CODE_1);
@@ -501,9 +498,6 @@ void satisfyClient(const int* clientSocketDescriptor) {
         responseCode = processRequest(httpHeader, content, &serverResponse);
     }
 
-    /*fprintf(stdout, "response code: %d\n", responseCode);
-    fprintf(stdout, "response: %s\n", serverResponse);*/
-
     // prepare response
     prepareHttpResponse(responseCode, serverResponse, &serverResponse);
 
@@ -515,66 +509,6 @@ void satisfyClient(const int* clientSocketDescriptor) {
         close(*clientSocketDescriptor);
         exit(EXIT_CODE_1);
     }
-
-    /*
-    // if client was run with -n or -f argument
-    if (requestOption != 'l') {
-
-    } else {
-        while ( (user = getpwent()) != NULL) {
-            memcpy(tmp, user->pw_name, strlen(login));
-            // if user name matches login prefix
-            if (strcmp(tmp, login) == 0) {
-                strcpy(response,"**Protocol xvarga14**");
-                strcat(response, user->pw_name);
-                strcat(response, "***");
-                found++;
-
-                // satisfy client
-                if ( write(*clientSocketDescriptor, response, strlen(response)) < 0) {
-                    fprintf(stderr, "Writing to socket resulted in error.\n");
-                    close(*clientSocketDescriptor);
-                    exit(EXIT_CODE_1);
-                }
-
-                // wait for client to confirm my response
-                if ( read(*clientSocketDescriptor,confirmationMessage, BUFSIZ) < 0) {
-                    fprintf(stderr, "Reading from socket resulted in error.\n");
-                    close(*clientSocketDescriptor);
-                    exit(EXIT_CODE_1);
-                }
-
-                // check if client received my response
-                if (strcmp(confirmationMessage, "**Protocol xvarga14**Message delivered.***") != 0) {
-                    fprintf(stderr, "Client did not receive response.\n");
-                    close(*clientSocketDescriptor);
-                    exit(EXIT_CODE_1);
-                }
-            }
-
-            bzero(user, sizeof(&user));
-            bzero(tmp, BUFSIZ);
-            bzero(confirmationMessage, BUFSIZ);
-            bzero(response, BUFSIZ);
-        }
-
-        // if no entry was found for given login prefix
-        if (found == 0) {
-            if ( write(*clientSocketDescriptor, "**Protocol xvarga14**No entry for given login prefix.***", 256) < 0) {
-                fprintf(stderr, "Writing to socket resulted in error.\n");
-                close(*clientSocketDescriptor);
-                exit(EXIT_CODE_1);
-            }
-        }
-
-        // tell client that there is nothing more to send
-        if ( write(*clientSocketDescriptor, "**Protocol xvarga14**No more entries.***", 256) < 0) {
-            fprintf(stderr, "Writing to socket resulted in error.\n");
-            close(*clientSocketDescriptor);
-            exit(EXIT_CODE_1);
-        }
-    }
-    endpwent();*/
 
     deleteHttpHeader(httpHeader);
     free(serverResponse);
@@ -692,8 +626,8 @@ int parseHeader(char* header, char** method, char** url, int* contentLength, cha
     strcpy(*url, tmpUrl);
 
     // compare protocol version
-    if (strcmp(tmpProtocolVersion, PROTOCOL_VERSION) != 0) {
-        sprintf(*errorResponse, "Bad protocol version; provided=%s required=%s\n", tmpProtocolVersion, PROTOCOL_VERSION);
+    if (strcmp(tmpProtocolVersion, HTTP_VERSION) != 0) {
+        sprintf(*errorResponse, "Bad protocol version; provided=%s required=%s\n", tmpProtocolVersion, HTTP_VERSION);
         headerParsingResult = RESPONSE_CODE_404;
     }
 
@@ -730,7 +664,7 @@ int parseHeader(char* header, char** method, char** url, int* contentLength, cha
  * @param response pointer to char* that will contain the result of API
  *
  * @return 200 on GET/DELETE/PUT method success, 201 on POST method success, 400 if there is no required content,
- *          409 if created board/boardContent already exits, 404 on some other errors
+ *          409 if created board/boardContent already exists, 404 on some other errors
  */
 int processRequest(struct HttpHeader* httpHeader, char* content, char** response) {
     int responseCode = 0;
@@ -904,8 +838,8 @@ int parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNa
  */
 int apiGetBoards(char** response) {
     if (boards->board == NULL) {
-        *response = realloc(*response, sizeof(char) * (strlen("No board exits") + 1));
-        strcpy(*response, "No board exits");
+        *response = realloc(*response, sizeof(char) * (strlen("No board exists") + 1));
+        strcpy(*response, "No board exists");
         return RESPONSE_CODE_404;
     }
 
@@ -943,12 +877,12 @@ int apiGetBoards(char** response) {
  * @param boardName char* name of the new board
  * @param response pointer to char* that will contain board content or error if some occurs
  *
- * @return 201 on success, 409 when board already exits, 404 if some other error occurred
+ * @return 201 on success, 409 when board already exists, 404 if some other error occurred
  */
 int apiCreateNewBoard(char* boardName, char** response) {
     if (isBoardAlreadyCreated(boardName) == 1) {
-        *response = realloc(*response, sizeof(char) * (strlen("Board already exits") + 1));
-        strcpy(*response, "Board already exits");
+        *response = realloc(*response, sizeof(char) * (strlen("Board already exists") + 1));
+        strcpy(*response, "Board already exists");
         return RESPONSE_CODE_409;
     }
 
@@ -960,7 +894,7 @@ int apiCreateNewBoard(char* boardName, char** response) {
     }
 
     struct Board* first = boards->board;
-    if (first == NULL) {    // no board exits yet
+    if (first == NULL) {    // no board exists yet
         boards->board = newBoard;
     } else {
         // find last board
@@ -986,8 +920,8 @@ int apiCreateNewBoard(char* boardName, char** response) {
  */
 int apiDeleteBoard(char* boardName, char** response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
-        *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
-        strcpy(*response, "No such board exits");
+        *response = realloc(*response, sizeof(char) * (strlen("No such board exists") + 1));
+        strcpy(*response, "No such board exists");
         return RESPONSE_CODE_404;
     }
 
@@ -1026,8 +960,8 @@ int apiDeleteBoard(char* boardName, char** response) {
  */
 int apiGetBoard(char* boardName, char** response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
-        *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
-        strcpy(*response, "No such board exits");
+        *response = realloc(*response, sizeof(char) * (strlen("No such board exists") + 1));
+        strcpy(*response, "No such board exists");
         return RESPONSE_CODE_404;
     }
 
@@ -1036,8 +970,8 @@ int apiGetBoard(char* boardName, char** response) {
     do {
         if (strcmp(board->name, boardName) == 0) {
             if (board->content == NULL) {   // no board content
-                *response = realloc(*response, sizeof(char) * (strlen("No content for this board exits") + 1));
-                strcpy(*response, "No content for this board exits");
+                *response = realloc(*response, sizeof(char) * (strlen("No content for this board exists") + 1));
+                strcpy(*response, "No content for this board exists");
                 return RESPONSE_CODE_404;
             } else{
                 return fillResponseWithBoardContent(board->content, board->name, response);  // fill response with board's content
@@ -1107,11 +1041,10 @@ int fillResponseWithBoardContent(struct BoardContent *boardContent, char* boardN
  *
  * @return 201 on success or 404 on failure
  */
- // todo post multiple content to single id
 int apiPostToBoard(char *boardName, char *content, char **response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
-        *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
-        strcpy(*response, "No such board exits");
+        *response = realloc(*response, sizeof(char) * (strlen("No such board exists") + 1));
+        strcpy(*response, "No such board exists");
         return RESPONSE_CODE_404;
     }
 
@@ -1140,8 +1073,8 @@ int apiPostToBoard(char *boardName, char *content, char **response) {
  */
 int apiDeleteContentFromBoard(char* boardName, int id, char** response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
-        *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
-        strcpy(*response, "No such board exits");
+        *response = realloc(*response, sizeof(char) * (strlen("No such board exists") + 1));
+        strcpy(*response, "No such board exists");
         return RESPONSE_CODE_404;
     }
 
@@ -1170,8 +1103,8 @@ int apiDeleteContentFromBoard(char* boardName, int id, char** response) {
  */
 int apiPutContentToBoard(char* boardName, int id, char* content, char** response) {
     if (isBoardAlreadyCreated(boardName) == 0) {
-        *response = realloc(*response, sizeof(char) * (strlen("No such board exits") + 1));
-        strcpy(*response, "No such board exits");
+        *response = realloc(*response, sizeof(char) * (strlen("No such board exists") + 1));
+        strcpy(*response, "No such board exists");
         return RESPONSE_CODE_404;
     }
 
@@ -1244,8 +1177,8 @@ void appendBoardContent(struct Board *board, char *content) {
  */
 int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **response) {
     if (boardContent == NULL || *boardContent == NULL) {
-        *response = realloc(*response, sizeof(char) * (strlen("No such board content exits") + 1));
-        strcpy(*response, "No such board content exits");
+        *response = realloc(*response, sizeof(char) * (strlen("No such board content exists") + 1));
+        strcpy(*response, "No such board content exists");
         return RESPONSE_CODE_404;
     }
 
@@ -1265,7 +1198,7 @@ int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **r
             if (foundToBeDeletedBoardContent == 1) {    // lower id for each content after deleted one
                 first->id--;
             } else {
-                if (first->nextContent->id == id) {
+                if (first->nextContent != NULL && first->nextContent->id == id) {
                     foundToBeDeletedBoardContent = 1;
                     struct BoardContent *toBeDeletedBoardContent = first->nextContent;
                     first->nextContent = toBeDeletedBoardContent->nextContent;
@@ -1278,13 +1211,18 @@ int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **r
     }
 
     *boardContent = tmpContent;
+    if (foundToBeDeletedBoardContent != 1) {
+        *response = realloc(*response, sizeof(char) * (strlen("No such board content exists") + 1));
+        strcpy(*response, "No such board content exists");
+        return RESPONSE_CODE_404;
+    }
     return RESPONSE_CODE_200;
 }
 
 int putContentToBoardContent(struct BoardContent *boardContent, int id, char *content, char **response) {
     if (boardContent == NULL) {
-        *response = realloc(*response, sizeof(char) * (strlen("No such board content exits") + 1));
-        strcpy(*response, "No such board content exits");
+        *response = realloc(*response, sizeof(char) * (strlen("No such board content exists") + 1));
+        strcpy(*response, "No such board content exists");
         return RESPONSE_CODE_404;
     }
 

@@ -11,41 +11,44 @@
 //#include "api.h"
 #include "../api.h"
 
+char* hostname;
+char* command;
+
 // function checks and gets arguments
-void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** login);
+void getArgs(int argc, char* argv[], int* portNumber);
 
 // function prepares http request header
-void prepareHttpRequest(char* command, char* hostname, char** httpRequest);
+void prepareHttpRequest(int portNumber, char **httpRequest);
 
 // function counts occurrences of char in char*
 int countChar(char* haystack, char needle);
 
 // funciton parses <comman> for name
-void parseCommandForName(char* command, char **name);
+void parseCommandForName(char **name);
 
 // funciton parses <command> to name and id
-void parseCommandForNameAndId(char* command, char **name, char **id);
+void parseCommandForNameAndId(char **name, char **id);
 
 // funciton parses <command> to name, id and content
-void parseCommandForNameAndIdAndContent(char* command, char** name, char** id, char** content);
+void parseCommandForNameAndIdAndContent(char** name, char** id, char** content);
 
 // funciton parses <command> to name and content
-void parseCommandForNameAndContent(char* command, char** name, char** content);
+void parseCommandForNameAndContent(char** name, char** content);
 
 // function concatenates name and id for api
 void concatNameAndId(char *name, char *id, char **result);
 
 // function creates HTTP request without body
-void createRequestWithoutBody(char** httpRequest, char* method, char* url, char* hostname);
+void createRequestWithoutBody(char **httpRequest, char *method, char *url, int portNumber);
 
 // function creates HTTP request with body
-void createRequestWithBody(char** httpRequest, char* method, char* url, char* hostname, char* content);
+void createRequestWithBody(char **httpRequest, char *method, char *url, int portNumber, char *content);
 
 // function finds server and creates socket
-void findServer(char **hostname, const int *portNumber, struct hostent* server, struct sockaddr_in *serverAddress, int *clientSocket);
+void findServer(const int *portNumber, struct hostent* server, struct sockaddr_in *serverAddress, int *clientSocket);
 
 // function connects to server, sends requests and prints responses
-void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, char** apiCommand, char** hostname);
+void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, int portNumber);
 
 // function parses HTTP request to header and content
 int parseResponse(char* response, char** header, char** body);
@@ -54,28 +57,41 @@ int parseHeader(char* request, int* responseCode, int* contentLength);
 
 void addCharToString(char** stringToBeAddedTo, char addedChar);
 
+void intToString(int number, char** result);
+
+// function performs cleanup at exit
+void atExitFunction();
+
 int main(int argc, char* argv[]) {
     int clientSocket = 0;
     int portNumber = 0;
-    char* hostname = (char*) malloc(sizeof(char) * 1);
+    hostname = (char*) malloc(sizeof(char) * 1);
     hostname[0] = '\0';
-    char* command = (char*) malloc(sizeof(char) * 1);
+    command = (char*) malloc(sizeof(char) * 1);
     command[0] = '\0';
     struct hostent server;
     struct sockaddr_in serverAddress;
 
+    atexit(atExitFunction);
+
     // get arguments
-    getArgs(argc, argv, &portNumber, &hostname, &command);
+    getArgs(argc, argv, &portNumber);
 
     // find server
-    findServer(&hostname, &portNumber, &server, &serverAddress, &clientSocket);
+    findServer(&portNumber, &server, &serverAddress, &clientSocket);
 
     // send request and get response
-    initiateCommunication(&clientSocket, serverAddress, &command, &hostname);
+    initiateCommunication(&clientSocket, serverAddress, portNumber);
 
+    exit(EXIT_CODE_0);
+}
+
+/**
+ * Function deletes all the boards whenever exit() is called.
+ */
+void atExitFunction() {
     free(hostname);
     free(command);
-    exit(EXIT_CODE_0);
 }
 
 /**
@@ -84,13 +100,8 @@ int main(int argc, char* argv[]) {
  * @param argc argument count
  * @param argv pointer to array of chars
  * @param portNumber port number to be assigned
- * @param hostname host name to be assigned
- * @param n will be set to 1 if program is run with -n argument
- * @param f will be set to 1 if program is run with -f argument
- * @param l will be set to 1 if program is run with -l argument
- * @param login login to be assigned
  */
-void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** login) {
+void getArgs(int argc, char* argv[], int* portNumber) {
     int arguments;
     opterr = 0;
     char* commandOption = (char*) malloc(sizeof(char) *1);
@@ -108,8 +119,8 @@ void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** lo
                                 "item update <name> <id> <content> - PUT /board/<name>/<id>\nbe.g. ./isaclient -H localhost -p 1025 boards // this will send GET request to the server to obtain /boards");
                 exit(EXIT_CODE_1);
             case 'H':
-                *hostname = realloc(*hostname, sizeof(char) * (strlen(optarg) + 1));
-                strcpy(*hostname,optarg);
+                hostname = realloc(hostname, sizeof(char) * (strlen(optarg) + 1));
+                strcpy(hostname,optarg);
                 break;
             case 'p' :
                 *portNumber = (int) strtol(optarg,&optarg,10);
@@ -153,8 +164,8 @@ void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** lo
         strcat(commandOption, argv[i]);
         i++;
     }
-    *login = realloc(*login, sizeof(char) * (strlen(commandOption) + 1));
-    strcpy(*login, commandOption);
+    command = realloc(command, sizeof(char) * (strlen(commandOption) + 1));
+    strcpy(command, commandOption);
 
     // free allocated helper variables
     free(tmp);
@@ -164,11 +175,10 @@ void getArgs(int argc, char* argv[], int* portNumber, char** hostname, char** lo
 /**
  * Function tries to find appropriate API service for command arguments or it results in error if no API matches the commands.
  *
- * @param command char* <ommand> that will be parsed and then incluced in header
- * @param hostname char* server hostname
+ * @param portNumber int server port number
  * @param httpRequest char** pointer to char* representing HTTP header that will be prepared
  */
-void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
+void prepareHttpRequest(int portNumber, char **httpRequest) {
     char space = ' ';
     char* name = (char*) malloc(sizeof(char) * 1);
     name[0] = '\0';
@@ -179,9 +189,9 @@ void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
             id[0] = '\0';
             char* content = (char*) malloc(sizeof(char) * 1);
             content[0] = '\0';
-            parseCommandForNameAndIdAndContent(command, &name, &id, &content);
+            parseCommandForNameAndIdAndContent(&name, &id, &content);
             concatNameAndId(name, id, &name);
-            createRequestWithBody(httpRequest, PUT_BOARD, name, hostname, content);
+            createRequestWithBody(httpRequest, PUT_BOARD, name, portNumber, content);
             free(content);
             free(id);
             free(name);
@@ -191,54 +201,54 @@ void prepareHttpRequest(char* command, char* hostname, char** httpRequest) {
         if (countChar(command, space) == 3) {
             char* id = (char*) malloc(sizeof(char) * 1);
             id[0] = '\0';
-            parseCommandForNameAndId(command, &name, &id);
+            parseCommandForNameAndId(&name, &id);
             concatNameAndId(name, id, &name);
-            createRequestWithoutBody(httpRequest, DELETE_BOARD, name, hostname);
+            createRequestWithoutBody(httpRequest, DELETE_BOARD, name, portNumber);
             free(id);
             free(name);
             return;
         }
     } else if (strstr(command, "item add") != NULL) {       // POST /board
-        if (countChar(command, space) >= 3) {
+        if (countChar(command, space) >= 2) {
             char* content = (char*) malloc(sizeof(char) * 1);
             content[0] = '\0';
-            parseCommandForNameAndContent(command, &name, &content);
-            //createRequestWithoutBody(httpRequest, POST_BOARD, name, hostname);
-            createRequestWithBody(httpRequest, POST_BOARD, name, hostname, content);
+            parseCommandForNameAndContent(&name, &content);
+            createRequestWithBody(httpRequest, POST_BOARD, name, portNumber, content);
             free(content);
             free(name);
             return;
         }
-    } else if (strstr(command, "boards list") != NULL) {    // GET /board
+    } else if (strstr(command, "board list") != NULL) {    // GET /board
         if (countChar(command, space) == 2) {
-            parseCommandForName(command, &name);
-            createRequestWithoutBody(httpRequest, GET_BOARD, name, hostname);
+            parseCommandForName(&name);
+            createRequestWithoutBody(httpRequest, GET_BOARD, name, portNumber);
             free(name);
             return;
         }
     } else if (strstr(command, "board delete") != NULL) {   // DELETE /boards
         if (countChar(command, space) == 2) {
-            parseCommandForName(command, &name);
-            createRequestWithoutBody(httpRequest, DELETE_BOARDS, name, hostname);
+            parseCommandForName(&name);
+            createRequestWithoutBody(httpRequest, DELETE_BOARDS, name, portNumber);
             free(name);
             return;
         }
     } else if (strstr(command, "board add") != NULL) {      // POST /boards
         if (countChar(command, space) == 2) {
-            parseCommandForName(command, &name);
-            createRequestWithoutBody(httpRequest, POST_BOARDS, name, hostname);
+            parseCommandForName(&name);
+            createRequestWithoutBody(httpRequest, POST_BOARDS, name, portNumber);
             free(name);
             return;
         }
     } else if (strstr(command, "boards") != NULL) {         // GET /boards
         if (countChar(command, space) == 0) {
-            createRequestWithoutBody(httpRequest, GET_BOARDS, "", hostname);
+            createRequestWithoutBody(httpRequest, GET_BOARDS, "", portNumber);
             free(name);
             return;
         }
     }
 
     free(name);
+    free(*httpRequest);
     fprintf(stderr, "Bad <command> argument; try running with \"-h\" argument for more info.\n");
     exit(EXIT_CODE_1);
 }
@@ -266,10 +276,9 @@ int countChar(char* haystack, const char needle) {
 /**
  * Function parses <command> for name.
  *
- * @param command char* <command> parsed
  * @param name char* parsed name
  */
-void parseCommandForName(char* command, char** name) {
+void parseCommandForName(char** name) {
     // todo check whether <command> has good format, e.g. board add <name>
     int numberOfSpaces = 0;
     char* tmpName = (char*) malloc(sizeof(char) * (strlen(*name) + 1));
@@ -306,11 +315,10 @@ void parseCommandForName(char* command, char** name) {
 /**
  * Function parses <command> from argument for name and id.
  *
- * @param command char* <command> that is parsed
  * @param name char* parsed name
  * @param id char* parsed id
  */
-void parseCommandForNameAndId(char* command, char **name, char **id) {
+void parseCommandForNameAndId(char **name, char **id) {
     int numberOfSpaces = 0;
     char* tmpName = (char*) malloc(sizeof(char) * (strlen(*name) + 1));
     strcpy(tmpName, *name);
@@ -360,12 +368,11 @@ void parseCommandForNameAndId(char* command, char **name, char **id) {
 /**
  * Function parses <command> from argument for name, id and content
  *
- * @param command char* <command> that is parsed
  * @param name char* parsed name
  * @param id char* parsed id
  * @param content char* parsed content
  */
-void parseCommandForNameAndIdAndContent(char* command, char **name, char **id, char** content) {
+void parseCommandForNameAndIdAndContent(char **name, char **id, char** content) {
     int numberOfSpaces = 0;
     char* tmpName = (char*) malloc(sizeof(char) * (strlen(*name) + 1));
     strcpy(tmpName, *name);
@@ -432,11 +439,10 @@ void parseCommandForNameAndIdAndContent(char* command, char **name, char **id, c
 /**
  * Function parses <command> from argument for name and content.
  *
- * @param command char* <command> that is parsed
  * @param name char* parsed name
  * @param content char* parsed content
  */
-void parseCommandForNameAndContent(char* command, char** name, char** content) {
+void parseCommandForNameAndContent(char** name, char** content) {
     int numberOfSpaces = 0;
     char* tmpName = (char*) malloc(sizeof(char) * (strlen(*name) + 1));
     strcpy(tmpName, *name);
@@ -518,16 +524,19 @@ void concatNameAndId(char* name, char* id, char** result) {
  * @param httpRequest char** pointer to request that will be build
  * @param method char* HTTP request header method
  * @param url char* HTTP request header url
- * @param hostname char* HTTP request header hostname
+ * @param portNumber int server port number
  */
-void createRequestWithoutBody(char** httpRequest, char* method, char* url, char* hostname) {
+void createRequestWithoutBody(char **httpRequest, char *method, char *url, int portNumber) {
     unsigned long methodLen = strlen(method);
     unsigned long urlLen = strlen(url);
     unsigned long hostnameLen = strlen(hostname);
     char* host = (char*) malloc(sizeof(char) * (strlen("Host: ") + 1));
     strcpy(host, "Host: ");
     unsigned long hostLen = strlen(host);
-    unsigned long requestSize = methodLen + urlLen + strlen(PROTOCOL_VERSION) + hostnameLen + hostLen + 8; // space, \r, \n, \r, \n, \r, \n, \0
+    char* portNumberAsString = (char*) malloc(sizeof(char) * 1);
+    portNumberAsString[0] = '\0';
+    intToString(portNumber, &portNumberAsString);
+    unsigned long requestSize = methodLen + urlLen + strlen(HTTP_VERSION) + hostnameLen + hostLen + strlen(portNumberAsString) + 9; // space, \r, \n, :, \r, \n, \r, \n, \0
 
     char* tmpRequest = (char*) malloc(sizeof(char) * (requestSize + 1));
     bzero(tmpRequest, requestSize);
@@ -538,16 +547,19 @@ void createRequestWithoutBody(char** httpRequest, char* method, char* url, char*
     strcpy(tmpRequest, method);
     strcat(tmpRequest, url);
     tmpRequest[methodLen + urlLen] = ' ';
-    strcat(tmpRequest, PROTOCOL_VERSION);
+    strcat(tmpRequest, HTTP_VERSION);
     strcat(tmpRequest, "\r\n");
     strcat(tmpRequest, host);
     strcat(tmpRequest, hostname);
+    tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen] = ':';
+    tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen + 1] = '\0';
     strcat(tmpRequest, "\r\n\r\n");
     tmpRequest[requestSize] = '\0';
 
     *httpRequest = realloc(*httpRequest, sizeof(char) * (strlen(tmpRequest) + 1));
     strcpy(*httpRequest, tmpRequest);
 
+    free(portNumberAsString);
     free(tmpRequest);
     free(host);
 }
@@ -559,10 +571,10 @@ void createRequestWithoutBody(char** httpRequest, char* method, char* url, char*
  * @param httpRequest char** pointer to header that will be build
  * @param method char* HTTP request header method
  * @param url char* HTTP request header url
- * @param hostname char* HTTP request header hostname
+ * @param portNumber int server port number
  * @param content char* body of HTTP request
  */
-void createRequestWithBody(char** httpRequest, char* method, char* url, char* hostname, char* content) {
+void createRequestWithBody(char **httpRequest, char *method, char *url, int portNumber, char *content) {
     unsigned long methodLen = strlen(method);
     unsigned long urlLen = strlen(url);
     unsigned long hostnameLen = strlen(hostname);
@@ -577,7 +589,10 @@ void createRequestWithBody(char** httpRequest, char* method, char* url, char* ho
     char* contentLengthWithLengthOfContent = (char*) malloc(sizeof(char) * (contentLenghtLen + strlen(contentLenAsString) + 1));
     strcpy(contentLengthWithLengthOfContent, CONTENT_LENGTH);
     strcat(contentLengthWithLengthOfContent, contentLenAsString);
-    unsigned long requestSize = methodLen + urlLen + strlen(PROTOCOL_VERSION) + hostnameLen + hostLen + contentTypeLen + strlen(contentLengthWithLengthOfContent) + contentLen + 12; // space, \r, \n, \r, \n, \r, \n, \r, \n, \r, \n, \0
+    char* portNumberAsString = (char*) malloc(sizeof(char) * 1);
+    portNumberAsString[0] = '\0';
+    intToString(portNumber, &portNumberAsString);
+    unsigned long requestSize = methodLen + urlLen + strlen(HTTP_VERSION) + hostnameLen + hostLen + strlen(portNumberAsString) + contentTypeLen + strlen(contentLengthWithLengthOfContent) + contentLen + 13; // space, \r, \n, :, \r, \n, \r, \n, \r, \n, \r, \n, \0
 
     char* tmpRequest = (char*) malloc(sizeof(char) * (requestSize + 1));
     bzero(tmpRequest, requestSize);
@@ -588,10 +603,13 @@ void createRequestWithBody(char** httpRequest, char* method, char* url, char* ho
     strcpy(tmpRequest, method);
     strcat(tmpRequest, url);
     tmpRequest[methodLen + urlLen] = ' ';
-    strcat(tmpRequest, PROTOCOL_VERSION);
+    strcat(tmpRequest, HTTP_VERSION);
     strcat(tmpRequest, "\r\n");
     strcat(tmpRequest, host);
     strcat(tmpRequest, hostname);
+    tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen] = ':';
+    tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen + 1] = '\0';
+    strcat(tmpRequest, portNumberAsString);
     strcat(tmpRequest, "\r\n");
     strcat(tmpRequest, CONTENT_TYPE);
     strcat(tmpRequest, "\r\n");
@@ -608,20 +626,20 @@ void createRequestWithBody(char** httpRequest, char* method, char* url, char* ho
     free(contentLengthWithLengthOfContent);
     free(tmpRequest);
     free(host);
+    free(portNumberAsString);
 }
 
 /**
  * Function finds server according to hostname argument (either name or IPv4). Function also creates socket.
  *
- * @param hostname host name of server
  * @param portNumber port number of server
  * @param server structure with info about host
  * @param serverAddress structure with socket elements
  * @param clientSocket descriptor of client socket
  */
-void findServer(char **hostname, const int *portNumber, struct hostent* server, struct sockaddr_in *serverAddress, int* clientSocket) {
+void findServer(const int *portNumber, struct hostent* server, struct sockaddr_in *serverAddress, int* clientSocket) {
     // "
-    if ( (server=gethostbyname(*hostname)) == NULL) {
+    if ( (server=gethostbyname(hostname)) == NULL) {
         fprintf(stderr, "There appears to be no such host.\n");
     }
 
@@ -642,13 +660,12 @@ void findServer(char **hostname, const int *portNumber, struct hostent* server, 
  *
  * @param clientSocket socket descriptor
  * @param serverAddress socket address structure of server
- * @param apiCommand pointer to char* where api command will be stored
- * @param hostname pointer to char* where hostname will be stored
+ * @param portNumber int number of port that the server is running on
  */
-void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, char** apiCommand, char** hostname){
+void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, int portNumber) {
     char* httpRequest = (char*) malloc(sizeof(char) * 1);
     httpRequest[0] = '\0';
-    prepareHttpRequest(*apiCommand, *hostname, &httpRequest);
+    prepareHttpRequest(portNumber, &httpRequest);
 
     char request[BUFSIZ];
     char response[BUFSIZ];
@@ -663,6 +680,7 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     if ( connect(*clientSocket,(struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) {
         fprintf(stderr, "Connecting to server resulted in error.\n");
         close(*clientSocket);
+        free(httpRequest);
         exit(1);
     }
     // " inspired by: Rysavy Ondrej - DemoTcp/client.c
@@ -674,6 +692,7 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     if ( write(*clientSocket, request, strlen(request)) < 0) {
         fprintf(stderr, "Writing to socket resulted in error.\n");
         close(*clientSocket);
+        free(httpRequest);
         exit(1);
     }
 
@@ -681,9 +700,10 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     if (read(*clientSocket, response, BUFSIZ) < 0) {
         fprintf(stderr, "Reading from socket resulted in error.\n");
         close(*clientSocket);
+        free(httpRequest);
         exit(EXIT_CODE_1);
     }
-    //fprintf(stdout, "%s\n", response);
+
     char* tmpHeader = (char*) malloc(sizeof(char) * 1);
     tmpHeader[0] = '\0';
     char* tmpBody = (char*) malloc(sizeof(char) * 1);
@@ -691,62 +711,8 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
     parseResponse(response, &tmpHeader, &tmpBody);
 
     // print header (without blank line) and content
-    fprintf(stderr, "HTTP response header:\n%s", tmpHeader);
-    fprintf(stdout, "HTTP response body:\n%s\n", tmpBody);
-
-    // if client was run with -n or -f argument
-    /*if ( *l == 0) {
-        // get response from server
-        if (read(*clientSocket, response, BUFSIZ) < 0) {
-            fprintf(stderr, "Reading from socket resulted in error.\n");
-            close(*clientSocket);
-            exit(1);
-        }
-
-        // check if communication is in set protocol
-        if ( checkProtocol(response) != 0) {
-            fprintf(stderr, "Communication in unknown protocol.\n");
-            close(*clientSocket);
-            exit(1);
-        }
-
-        // print response
-        memcpy(message, &response[21], strstr(response, "***")-response-21);
-        fprintf(stdout, "%s\n", message);
-
-    } else {
-        // if client was run with -l argument
-        while ( (r = read(*clientSocket,response, BUFSIZ)) >= 0 && (strcmp(response, "**Protocol xvarga14**No more entries.***")) != 0) {
-            // check if communication is in set protocol
-            if ( checkProtocol(response) != 0) {
-                fprintf(stderr, "Communication in unknown protocol.\n");
-                close(*clientSocket);
-                exit(1);
-            }
-
-            // print response
-            memcpy(message, &response[21], strstr(response, "***")-response-21);
-            fprintf(stdout, "%s\n", message);
-
-            bzero(response, BUFSIZ);
-            bzero(message, BUFSIZ);
-
-            // tell server the message was delivered
-            if ( write(*clientSocket, "**Protocol xvarga14**Message delivered.***", 256) < 0) {
-                fprintf(stderr, "Writing to socket resulted in error.\n");
-                close(*clientSocket);
-                exit(1);
-            }
-        }
-
-        // print error if reading from socket was unsuccessful
-        if ( r < 0 ) {
-            fprintf(stderr, "Reading from socket resulted in error.\n");
-            close(*clientSocket);
-            exit(1);
-        }
-
-    }*/
+    fprintf(stderr, "%s\n", tmpHeader);
+    fprintf(stdout, "%s\n", tmpBody);
 
     free(tmpHeader);
     free(tmpBody);
@@ -865,8 +831,8 @@ int parseHeader(char* request, int* responseCode, int* contentLength) {
     }
 
     // check if Protocol version is HTTP/1.1
-    if (strcmp(tmpProtocolVersion, PROTOCOL_VERSION) != 0) {
-        fprintf(stderr, "Bad protocol version; received=%s;  expected=%s\n", tmpProtocolVersion, PROTOCOL_VERSION);
+    if (strcmp(tmpProtocolVersion, HTTP_VERSION) != 0) {
+        fprintf(stderr, "Bad protocol version; received=%s;  expected=%s\n", tmpProtocolVersion, HTTP_VERSION);
         parseSuccess = 0;
     }
 
@@ -901,4 +867,42 @@ void addCharToString(char** stringToBeAddedTo, char addedChar) {
     *stringToBeAddedTo = realloc(*stringToBeAddedTo, sizeof(char) * (strlen(tmp2) + 1));
     strcpy(*stringToBeAddedTo, tmp2);
     free(tmp2);
+}
+
+/**
+ * Function converts integer to string.
+ *
+ * @param number int number to be converted
+ * @param result pointer to char* result
+ */
+void intToString(int number, char** result) {
+    // "
+    char const digit[] = "0123456789";
+    char* tmpResult = (char*) malloc(sizeof(char) * 1);
+    tmpResult[0] = '\0';
+
+    int i = number;
+    if (number < 0) {
+        tmpResult = realloc(tmpResult, sizeof(char) * 2);
+        tmpResult[0] = '-';
+        tmpResult[1] = '\0';
+        i *= 1;
+    }
+    int numLen = 0;
+    do {
+        numLen++;
+        i /= 10;
+    } while (i);
+    int isNegative = (int) strlen(tmpResult);
+    tmpResult = realloc(tmpResult, sizeof(char) * (isNegative + numLen + 1));
+    bzero(tmpResult, isNegative+numLen+1);
+    do {
+        tmpResult[--numLen] = digit[number%10];
+        number /= 10;
+    } while (number);
+    // " inspired by https://stackoverflow.com/questions/9655202/how-to-convert-integer-to-string-in-c
+
+    *result = realloc(*result, sizeof(char) * (strlen(tmpResult)+1));
+    strcpy(*result, tmpResult);
+    free(tmpResult);
 }
