@@ -1,3 +1,12 @@
+//////////////////////////////////////////////////////////////
+/*                                                          */
+/*      Project for ISA course - HTTP bulletin board        */
+/*      Header file for API                                 */
+/*                                                          */
+/*      Author: Marek Varga                                 */
+/*      Login: xvarga14                                     */
+/*                                                          */
+//////////////////////////////////////////////////////////////
 #ifndef PROJECT_API_H
 #define PROJECT_API_H
 

@@ -1,3 +1,12 @@
+//////////////////////////////////////////////////////////////
+/*                                                          */
+/*      Project for ISA course - HTTP bulletin board        */
+/*      Source file for client part                         */
+/*                                                          */
+/*      Author: Marek Varga                                 */
+/*      Login: xvarga14                                     */
+/*                                                          */
+//////////////////////////////////////////////////////////////
 #include <stdio.h>
 #include <stdlib.h>
 #include <netdb.h>

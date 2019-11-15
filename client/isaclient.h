@@ -1,3 +1,12 @@
+//////////////////////////////////////////////////////////////
+/*                                                          */
+/*      Project for ISA course - HTTP bulletin board        */
+/*      Header file for client part                         */
+/*                                                          */
+/*      Author: Marek Varga                                 */
+/*      Login: xvarga14                                     */
+/*                                                          */
+//////////////////////////////////////////////////////////////
 #ifndef PROJECT_ISACLIENT_H
 #define PROJECT_ISACLIENT_H
 

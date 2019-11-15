@@ -1,7 +1,12 @@
-//
-// Created by marek on 11/15/19.
-//
-
+//////////////////////////////////////////////////////////////
+/*                                                          */
+/*      Project for ISA course - HTTP bulletin board        */
+/*      Header file for helper functions                    */
+/*                                                          */
+/*      Author: Marek Varga                                 */
+/*      Login: xvarga14                                     */
+/*                                                          */
+//////////////////////////////////////////////////////////////
 #ifndef PROJECT_UTILS_H
 #define PROJECT_UTILS_H
 
