@@ -503,7 +503,6 @@ void satisfyClient(const int* clientSocketDescriptor) {
 
     strcpy(response, serverResponse);
     // send response
-    // todo split too long response?
     if ( write(*clientSocketDescriptor, response, strlen(response)) < 0) {
         fprintf(stderr, "Writing to socket resulted in error.\n");
         close(*clientSocketDescriptor);

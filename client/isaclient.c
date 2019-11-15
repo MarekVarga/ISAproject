@@ -23,16 +23,16 @@ void prepareHttpRequest(int portNumber, char **httpRequest);
 // function counts occurrences of char in char*
 int countChar(char* haystack, char needle);
 
-// funciton parses <comman> for name
+// function parses <command> for name
 void parseCommandForName(char **name);
 
-// funciton parses <command> to name and id
+// function parses <command> to name and id
 void parseCommandForNameAndId(char **name, char **id);
 
-// funciton parses <command> to name, id and content
+// function parses <command> to name, id and content
 void parseCommandForNameAndIdAndContent(char** name, char** id, char** content);
 
-// funciton parses <command> to name and content
+// function parses <command> to name and content
 void parseCommandForNameAndContent(char** name, char** content);
 
 // function concatenates name and id for api
@@ -53,11 +53,17 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
 // function parses HTTP request to header and content
 int parseResponse(char* response, char** header, char** body);
 
+// function parses HTTP response header
 int parseHeader(char* request, int* responseCode, int* contentLength);
 
+// function concatenates char to string
 void addCharToString(char** stringToBeAddedTo, char addedChar);
 
+// function converts int to string
 void intToString(int number, char** result);
+
+// function checks new line char
+void checkNewLineChar(char** commandOption);
 
 // function performs cleanup at exit
 void atExitFunction();
@@ -164,12 +170,53 @@ void getArgs(int argc, char* argv[], int* portNumber) {
         strcat(commandOption, argv[i]);
         i++;
     }
+    // check new line char
+    checkNewLineChar(&commandOption);
     command = realloc(command, sizeof(char) * (strlen(commandOption) + 1));
     strcpy(command, commandOption);
 
     // free allocated helper variables
     free(tmp);
     free(commandOption);
+}
+
+/**
+ * Function checks whether the new line character is properly represented in command line option.
+ * For example, "\\n" is replaced with "\n"
+ *
+ * @param commandOption char** pointer to string is command option loaded from command line
+ */
+void checkNewLineChar(char** commandOption) {
+    char* tmpString = malloc(sizeof(char) * (strlen(*commandOption) + 1));
+    strcpy(tmpString, *commandOption);
+    char* result;
+
+    while ((result = strstr(tmpString, "\\n")) != NULL) {
+        int count = (int) (strlen(tmpString) - strlen(result));
+        char* newBeginning = malloc(sizeof(char) * (count + 1));
+        for (int i = 0; i < count; i++) {
+            newBeginning[i] = tmpString[i];
+        }
+        newBeginning[count] = '\0';
+        char* tmpResult = malloc(sizeof(char) * (strlen(result) + 1));
+        strcpy(tmpResult, result+1);
+        tmpResult[0] = '\n';
+        char* tmp = malloc(sizeof(char) * (strlen(newBeginning) + 1));
+        strcpy(tmp, newBeginning);
+        newBeginning = realloc(newBeginning, sizeof(char) * (strlen(tmp) + strlen(tmpResult) + 1));
+        strcpy(newBeginning, tmp);
+        strcat(newBeginning, tmpResult);
+        tmpString = realloc(tmpString, sizeof(char) * (strlen(newBeginning) + 1));
+        strcpy(tmpString, newBeginning);
+        free(tmp);
+        free(tmpResult);
+        free(newBeginning);
+    }
+
+    free(result);
+    *commandOption = realloc(*commandOption, sizeof(char) * (strlen(tmpString) + 1));
+    strcpy(*commandOption, tmpString);
+    free(tmpString);
 }
 
 /**
