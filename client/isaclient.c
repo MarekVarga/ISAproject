@@ -8,65 +8,8 @@
 #include <ctype.h>
 
 #include "isaclient.h"
-//#include "api.h"
-#include "../api.h"
-
-char* hostname;
-char* command;
-
-// function checks and gets arguments
-void getArgs(int argc, char* argv[], int* portNumber);
-
-// function prepares http request header
-void prepareHttpRequest(int portNumber, char **httpRequest);
-
-// function counts occurrences of char in char*
-int countChar(char* haystack, char needle);
-
-// function parses <command> for name
-void parseCommandForName(char **name);
-
-// function parses <command> to name and id
-void parseCommandForNameAndId(char **name, char **id);
-
-// function parses <command> to name, id and content
-void parseCommandForNameAndIdAndContent(char** name, char** id, char** content);
-
-// function parses <command> to name and content
-void parseCommandForNameAndContent(char** name, char** content);
-
-// function concatenates name and id for api
-void concatNameAndId(char *name, char *id, char **result);
-
-// function creates HTTP request without body
-void createRequestWithoutBody(char **httpRequest, char *method, char *url, int portNumber);
-
-// function creates HTTP request with body
-void createRequestWithBody(char **httpRequest, char *method, char *url, int portNumber, char *content);
-
-// function finds server and creates socket
-void findServer(const int *portNumber, struct hostent* server, struct sockaddr_in *serverAddress, int *clientSocket);
-
-// function connects to server, sends requests and prints responses
-void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAddress, int portNumber);
-
-// function parses HTTP request to header and content
-int parseResponse(char* response, char** header, char** body);
-
-// function parses HTTP response header
-int parseHeader(char* request, int* responseCode, int* contentLength);
-
-// function concatenates char to string
-void addCharToString(char** stringToBeAddedTo, char addedChar);
-
-// function converts int to string
-void intToString(int number, char** result);
-
-// function checks new line char
-void checkNewLineChar(char** commandOption);
-
-// function performs cleanup at exit
-void atExitFunction();
+//#include "utils.h"
+#include "../utils.h"
 
 int main(int argc, char* argv[]) {
     int clientSocket = 0;
@@ -301,26 +244,6 @@ void prepareHttpRequest(int portNumber, char **httpRequest) {
 }
 
 /**
- * Function counts the occurrences of certain character (needle) in a string (haystack).
- *
- * @param haystack char whose occurrence is counted
- * @param needle string in which char is counted
- *
- * @return number of occurrences of needle in haystack
- */
-int countChar(char* haystack, const char needle) {
-    int occurrences = 0;
-
-    for (int i = 0; i < (int) strlen(haystack); i++) {
-        if (haystack[i] == needle) {
-            occurrences++;
-        }
-    }
-
-    return occurrences;
-}
-
-/**
  * Function parses <command> for name.
  *
  * @param name char* parsed name
@@ -536,32 +459,6 @@ void parseCommandForNameAndContent(char** name, char** content) {
     free(tmp);
     free(tmpContent);
     free(tmpName);
-}
-
-/**
- * Function concatenates name and id obtained from <command>.
- * In concatenation, '/' needs to inserted in between them.
- * The result is then stored in result parameter.
- *
- * @param name char* name obtained from <command>
- * @param id char* id obtained from <command>
- * @param result pointer to char* where result is stored
- */
-void concatNameAndId(char* name, char* id, char** result) {
-    char* tmp = malloc(sizeof(char) * (strlen(name) + strlen(id) + 2));
-    if (tmp == NULL) {
-        exit(EXIT_CODE_1);
-    }
-
-    strcpy(tmp, name);
-    tmp[strlen(name)] = '/';
-    tmp[strlen(name)+1] = '\0';
-    strcat(tmp, id);
-    tmp[strlen(name)+strlen(id)+1] = '\0';
-
-    *result = realloc(*result, sizeof(char) * (strlen(tmp) + 1));
-    strcpy(*result, tmp);
-    free(tmp);
 }
 
 /**
@@ -892,64 +789,4 @@ int parseHeader(char* request, int* responseCode, int* contentLength) {
     free(tmpStatusCode);
 
     return parseSuccess;
-}
-
-/**
- * Function adds character to string. It reallocates string so that concatenation is possible.
- *
- * @param stringToBeAddedTo char** pointer to string that will be concatenated with new char
- * @param addedChar char that will be added to the string
- */
-void addCharToString(char** stringToBeAddedTo, char addedChar) {
-    char* tmp = (char*) malloc(sizeof(char) * (strlen(*stringToBeAddedTo) + 1));
-    strcpy(tmp, *stringToBeAddedTo);
-    tmp[strlen(*stringToBeAddedTo)] = '\0';
-
-    char* tmp2 = (char*) malloc(sizeof(char) * (strlen(tmp) + 2));
-    strcpy(tmp2, tmp);
-    tmp2[strlen(tmp)] = addedChar;
-    tmp2[strlen(tmp)+1] = '\0';
-    free(tmp);
-
-    *stringToBeAddedTo = realloc(*stringToBeAddedTo, sizeof(char) * (strlen(tmp2) + 1));
-    strcpy(*stringToBeAddedTo, tmp2);
-    free(tmp2);
-}
-
-/**
- * Function converts integer to string.
- *
- * @param number int number to be converted
- * @param result pointer to char* result
- */
-void intToString(int number, char** result) {
-    // "
-    char const digit[] = "0123456789";
-    char* tmpResult = (char*) malloc(sizeof(char) * 1);
-    tmpResult[0] = '\0';
-
-    int i = number;
-    if (number < 0) {
-        tmpResult = realloc(tmpResult, sizeof(char) * 2);
-        tmpResult[0] = '-';
-        tmpResult[1] = '\0';
-        i *= 1;
-    }
-    int numLen = 0;
-    do {
-        numLen++;
-        i /= 10;
-    } while (i);
-    int isNegative = (int) strlen(tmpResult);
-    tmpResult = realloc(tmpResult, sizeof(char) * (isNegative + numLen + 1));
-    bzero(tmpResult, isNegative+numLen+1);
-    do {
-        tmpResult[--numLen] = digit[number%10];
-        number /= 10;
-    } while (number);
-    // " inspired by https://stackoverflow.com/questions/9655202/how-to-convert-integer-to-string-in-c
-
-    *result = realloc(*result, sizeof(char) * (strlen(tmpResult)+1));
-    strcpy(*result, tmpResult);
-    free(tmpResult);
 }

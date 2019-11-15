@@ -1,7 +1,3 @@
-//
-// Created by marek on 10/2/19.
-//
-
 #ifndef PROJECT_API_H
 #define PROJECT_API_H
 
@@ -48,5 +44,8 @@ char* RESPONSE_201 = "HTTP/1.1 201 CREATED\r\n";
 char* RESPONSE_400 = "HTTP/1.1 400 BAD REQUEST\r\n";
 char* RESPONSE_404 = "HTTP/1.1 404 NOT FOUND\r\n";
 char* RESPONSE_409 = "HTTP/1.1 409 CONFLICT\r\n";
+
+int EXIT_CODE_0 = 0;
+int EXIT_CODE_1 = 1;
 
 #endif //PROJECT_API_H

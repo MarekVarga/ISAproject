@@ -9,7 +9,7 @@ SERVER = server/isaserver
 CLIENT = client/isaclient
 TEST = test
 
-all: $(SERVER) $(CLIENT) $(TEST)
+all: $(SERVER) $(CLIENT) $(TEST) $(UTILS)
 
 $(SERVER): $(SERVER).c
 	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER).c
@@ -19,4 +19,3 @@ $(CLIENT): $(CLIENT).c
 
 $(TEST): $(TEST).c
 	$(CC) $(CFLAGS) -o $(TEST) $(TEST).c
-
