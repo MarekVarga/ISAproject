@@ -575,7 +575,14 @@ int processRequest(struct HttpHeader* httpHeader, char* content, char** response
         } else if (strcmp(httpHeader->method, "POST") == 0) {   // POST /boards/<name>
             int boardNameLen = (int) (strlen(httpHeader->url) - strlen("/boards/"));
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));
-            responseCode = apiCreateNewBoard(boardName, response);
+            if (isBoarNameAlphaNumeric(boardName) == 1) {
+                responseCode = apiCreateNewBoard(boardName, response);
+            } else {
+                responseCode = RESPONSE_CODE_400;
+                const char* tmpResponse = "Board name can only contain alpha numeric chars\n";
+                *response = realloc(*response, sizeof(char) * (strlen(tmpResponse) + 1));
+                strcpy(*response, tmpResponse);
+            }
         } else if (strcmp(httpHeader->method, "DELETE") == 0) { // DELETE /boards/<name>
             int boardNameLen = (int) (strlen(httpHeader->url) - strlen("/boards/"));
             parseBoardNameFromUrl(httpHeader->url, &boardName, boardNameLen, strlen("/boards/"));

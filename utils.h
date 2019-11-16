@@ -12,6 +12,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #include "api.h"
 
@@ -122,6 +123,23 @@ void concatNameAndId(char* name, char* id, char** result) {
     *result = realloc(*result, sizeof(char) * (strlen(tmp) + 1));
     strcpy(*result, tmp);
     free(tmp);
+}
+
+/**
+ * Function checks whether given board name contains only alpha numeric characters.
+ *
+ * @param name const char* checked board name
+ *
+ * @return boolean 1 if board name contains only alpha numeric chars otherwise 0 is returned
+ */
+int isBoarNameAlphaNumeric(const char* name) {
+    for (int i = 0; i < (int) strlen(name); ++i) {
+        if (!isalnum(name[i])) {
+            return 0;
+        }
+    }
+
+    return 1;
 }
 
 #endif //PROJECT_UTILS_H

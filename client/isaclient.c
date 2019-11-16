@@ -71,10 +71,16 @@ void getArgs(int argc, char* argv[], int* portNumber) {
         switch (arguments) {
             case 'h':
                 fprintf(stdout, "Client part for ISA project; try to run with \"-H <host> -p <portnumber> <command>\" arguments\n"
-                                "<command> can be any of:\nboards - GET /boards\nboards add <name> - POST /boards/<name>\n"
-                                "board delete <name> - DELETE /boards/<name>\nboards list <name> - GET /board/<name>\n"
-                                "item add <name> <content> - POST /board/<name>\nitem delete <name> <id> - DELETE /board/<name>/<id>\n"
-                                "item update <name> <id> <content> - PUT /board/<name>/<id>\nbe.g. ./isaclient -H localhost -p 1025 boards // this will send GET request to the server to obtain /boards");
+                                "<command> can be any of:\n"
+                                "boards - GET /boards\n"
+                                "boards add <name> - POST /boards/<name>\n"
+                                "board delete <name> - DELETE /boards/<name>\n"
+                                "boards list <name> - GET /board/<name>\n"
+                                "item add <name> <content> - POST /board/<name>\n"
+                                "item delete <name> <id> - DELETE /board/<name>/<id>\n"
+                                "item update <name> <id> <content> - PUT /board/<name>/<id>\n"
+                                "e.g. ./isaclient -H localhost -p 1025 boards // this will send GET request to the server to obtain /boards\n"
+                                "where <name> must be alpha numeric character");
                 exit(EXIT_CODE_1);
             case 'H':
                 hostname = realloc(hostname, sizeof(char) * (strlen(optarg) + 1));
@@ -181,6 +187,7 @@ void prepareHttpRequest(int portNumber, char **httpRequest) {
     char space = ' ';
     char* name = (char*) malloc(sizeof(char) * 1);
     name[0] = '\0';
+    int nonAlphaNumeric = 0;
 
     if (strstr(command, "item update") != NULL) {   // PUT /board
         if (countChar(command, space) >= 3) {
@@ -234,9 +241,13 @@ void prepareHttpRequest(int portNumber, char **httpRequest) {
     } else if (strstr(command, "board add") != NULL) {      // POST /boards
         if (countChar(command, space) == 2) {
             parseCommandForName(&name);
-            createRequestWithoutBody(httpRequest, POST_BOARDS, name, portNumber);
-            free(name);
-            return;
+            if (isBoarNameAlphaNumeric(name) == 1) {
+                createRequestWithoutBody(httpRequest, POST_BOARDS, name, portNumber);
+                free(name);
+                return;
+            }
+            // board name contains non-alpha numeric values
+            nonAlphaNumeric = 1;
         }
     } else if (strstr(command, "boards") != NULL) {         // GET /boards
         if (countChar(command, space) == 0) {
@@ -248,7 +259,11 @@ void prepareHttpRequest(int portNumber, char **httpRequest) {
 
     free(name);
     free(*httpRequest);
-    fprintf(stderr, "Bad <command> argument; try running with \"-h\" argument for more info.\n");
+    if (nonAlphaNumeric == 1) {
+        fprintf(stderr, "<name> argument can only contain alpha numeric chars; try running with \"-h\" argument for more info.\n");
+    } else {
+        fprintf(stderr, "Bad <command> argument; try running with \"-h\" argument for more info.\n");
+    }
     exit(EXIT_CODE_1);
 }
 
