@@ -365,7 +365,7 @@ void parseCommandForNameAndIdAndContent(char **name, char **id, char** content) 
     for (int i = 0; i < (int) strlen(command); i++) {
         if (command[i] == ' ') {
             numberOfSpaces++;
-            if (numberOfSpaces < 4) {
+            if (numberOfSpaces < 5) {
                 continue;
             }
         }
@@ -433,12 +433,12 @@ void parseCommandForNameAndContent(char** name, char** content) {
     for (int i = 0; i < (int) strlen(command); i++) {
         if (command[i] == ' ') {
             numberOfSpaces++;
-            if (numberOfSpaces < 3) {
+            if (numberOfSpaces < 4) {
                 continue;
             }
         }
         if (numberOfSpaces >= 3) {
-            // <id> part of command is located behind third space
+            // <content> part of command is located behind third space
             if (command[i] != '\0') {
                 tmp = realloc(tmp, sizeof(char) * (strlen(tmpContent) + 2));
                 strcpy(tmp, tmpContent);
