@@ -30,6 +30,7 @@ int main(int argc, char* argv[]) {
     struct hostent server;
     struct sockaddr_in serverAddress;
 
+    // bind function to exit() call
     atexit(atExitFunction);
 
     // get arguments
@@ -273,7 +274,6 @@ void prepareHttpRequest(int portNumber, char **httpRequest) {
  * @param name char* parsed name
  */
 void parseCommandForName(char** name) {
-    // todo check whether <command> has good format, e.g. board add <name>
     int numberOfSpaces = 0;
     char* tmpName = (char*) malloc(sizeof(char) * (strlen(*name) + 1));
     strcpy(tmpName, *name);

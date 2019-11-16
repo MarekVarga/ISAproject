@@ -23,6 +23,7 @@
 int main(int argc, char* argv[]) {
     int port, clientSocketDescriptor;
     struct sockaddr_in serverAddress, clientAddress;
+    // create initial board structure
     createBoards();
     if (boards == NULL) {
         fprintf(stderr, "Unable to create initial empty boards");

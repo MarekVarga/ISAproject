@@ -13,7 +13,7 @@
 int MAX_NUMBER_OF_PENDING_CONNECTIONS = 10;
 
 char* HTTP_VERSION = "HTTP/1.1";
-char* CONTENT_TYPE = "Content-Type: text/plain";
+char* CONTENT_TYPE = "Content-Type:text/plain";
 char* CONTENT_LENGTH = "Content-Length: ";
 
 struct Boards {
