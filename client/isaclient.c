@@ -258,6 +258,7 @@ void prepareHttpRequest(int portNumber, char **httpRequest) {
         }
     }
 
+    // free vars and print error
     free(name);
     free(*httpRequest);
     if (nonAlphaNumeric == 1) {
@@ -302,6 +303,7 @@ void parseCommandForName(char** name) {
     *name = realloc(*name, sizeof(char) * (strlen(tmpName) + 1));
     strcpy(*name, tmpName);
 
+    // free auxiliary vars
     free(tmp);
     free(tmpName);
 }
@@ -354,6 +356,7 @@ void parseCommandForNameAndId(char **name, char **id) {
     *id = realloc(*id, sizeof(char) * (strlen(tmpId) + 1));
     strcpy(*id, tmpId);
 
+    // free auxiliary vars
     free(tmp);
     free(tmpId);
     free(tmpName);
@@ -424,6 +427,7 @@ void parseCommandForNameAndIdAndContent(char **name, char **id, char** content) 
     *content = realloc(*content, sizeof(char) * (strlen(tmpContent) + 1));
     strcpy(*content, tmpContent);
 
+    // free auxiliary vars
     free(tmp);
     free(tmpContent);
     free(tmpId);
@@ -480,6 +484,7 @@ void parseCommandForNameAndContent(char** name, char** content) {
     *content = realloc(*content, sizeof(char) * (strlen(tmpContent) + 1));
     strcpy(*content, tmpContent);
 
+    // free auxiliary vars
     free(tmp);
     free(tmpContent);
     free(tmpName);
@@ -508,28 +513,35 @@ void createRequestWithoutBody(char **httpRequest, char *method, char *url, int p
 
     char* tmpRequest = (char*) malloc(sizeof(char) * (requestSize + 1));
     bzero(tmpRequest, requestSize);
-    if (tmpRequest == NULL) {
+    if (tmpRequest != NULL) {
+        // build request
+        strcpy(tmpRequest, method);             // method
+        strcat(tmpRequest, url);                // URL
+        tmpRequest[methodLen + urlLen] = ' ';
+        strcat(tmpRequest, HTTP_VERSION);       // HTTP version
+        strcat(tmpRequest, "\r\n");
+        strcat(tmpRequest, host);               // host
+        strcat(tmpRequest, hostname);           // hostname
+        tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen] = ':';
+        tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen + 1] = '\0';
+        strcat(tmpRequest, "\r\n\r\n");
+        tmpRequest[requestSize] = '\0';
+
+        *httpRequest = realloc(*httpRequest, sizeof(char) * (strlen(tmpRequest) + 1));
+        strcpy(*httpRequest, tmpRequest);
+
+        // free auxiliary vars
+        free(portNumberAsString);
+        free(tmpRequest);
+        free(host);
+    } else {
+        // free auxiliary vars
+        free(portNumberAsString);
+        free(tmpRequest);
+        free(host);
+
         exit(EXIT_CODE_1);
     }
-
-    strcpy(tmpRequest, method);
-    strcat(tmpRequest, url);
-    tmpRequest[methodLen + urlLen] = ' ';
-    strcat(tmpRequest, HTTP_VERSION);
-    strcat(tmpRequest, "\r\n");
-    strcat(tmpRequest, host);
-    strcat(tmpRequest, hostname);
-    tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen] = ':';
-    tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen + 1] = '\0';
-    strcat(tmpRequest, "\r\n\r\n");
-    tmpRequest[requestSize] = '\0';
-
-    *httpRequest = realloc(*httpRequest, sizeof(char) * (strlen(tmpRequest) + 1));
-    strcpy(*httpRequest, tmpRequest);
-
-    free(portNumberAsString);
-    free(tmpRequest);
-    free(host);
 }
 
 /**
@@ -564,37 +576,45 @@ void createRequestWithBody(char **httpRequest, char *method, char *url, int port
 
     char* tmpRequest = (char*) malloc(sizeof(char) * (requestSize + 1));
     bzero(tmpRequest, requestSize);
-    if (tmpRequest == NULL) {
+    if (tmpRequest != NULL) {
+        // build request
+        strcpy(tmpRequest, method);                             // method
+        strcat(tmpRequest, url);                                // URL
+        tmpRequest[methodLen + urlLen] = ' ';
+        strcat(tmpRequest, HTTP_VERSION);                       // HTTP version
+        strcat(tmpRequest, "\r\n");
+        strcat(tmpRequest, host);                               // host
+        strcat(tmpRequest, hostname);                           // hostname
+        tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen] = ':';
+        tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen + 1] = '\0';
+        strcat(tmpRequest, portNumberAsString);
+        strcat(tmpRequest, "\r\n");
+        strcat(tmpRequest, CONTENT_TYPE);                       // Content-Type
+        strcat(tmpRequest, "\r\n");
+        strcat(tmpRequest, contentLengthWithLengthOfContent);   // Content-Length
+        strcat(tmpRequest, "\r\n");
+        strcat(tmpRequest, "\r\n"); // blank line
+        // body
+        strcat(tmpRequest, content);
+        tmpRequest[requestSize] = '\0';
+
+        *httpRequest = realloc(*httpRequest, sizeof(char) * (strlen(tmpRequest) + 1));
+        strcpy(*httpRequest, tmpRequest);
+
+        // free auxiliary vars
+        free(contentLengthWithLengthOfContent);
+        free(tmpRequest);
+        free(host);
+        free(portNumberAsString);
+    } else {
+        // free auxiliary vars
+        free(contentLengthWithLengthOfContent);
+        free(tmpRequest);
+        free(host);
+        free(portNumberAsString);
+
         exit(EXIT_CODE_1);
     }
-
-    strcpy(tmpRequest, method);
-    strcat(tmpRequest, url);
-    tmpRequest[methodLen + urlLen] = ' ';
-    strcat(tmpRequest, HTTP_VERSION);
-    strcat(tmpRequest, "\r\n");
-    strcat(tmpRequest, host);
-    strcat(tmpRequest, hostname);
-    tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen] = ':';
-    tmpRequest[methodLen + urlLen + strlen(HTTP_VERSION) + 2 + hostLen + hostnameLen + 1] = '\0';
-    strcat(tmpRequest, portNumberAsString);
-    strcat(tmpRequest, "\r\n");
-    strcat(tmpRequest, CONTENT_TYPE);
-    strcat(tmpRequest, "\r\n");
-    strcat(tmpRequest, contentLengthWithLengthOfContent);
-    strcat(tmpRequest, "\r\n");
-    strcat(tmpRequest, "\r\n"); // blank line
-    // body
-    strcat(tmpRequest, content);
-    tmpRequest[requestSize] = '\0';
-
-    *httpRequest = realloc(*httpRequest, sizeof(char) * (strlen(tmpRequest) + 1));
-    strcpy(*httpRequest, tmpRequest);
-
-    free(contentLengthWithLengthOfContent);
-    free(tmpRequest);
-    free(host);
-    free(portNumberAsString);
 }
 
 /**
@@ -637,11 +657,8 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
 
     char request[BUFSIZ];
     char response[BUFSIZ];
-    char message [BUFSIZ];
-    bzero(message,BUFSIZ);
     bzero(request,BUFSIZ);
     bzero(response,BUFSIZ);
-
 
     // "
     // connect to server
@@ -649,7 +666,7 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
         fprintf(stderr, "Connecting to server resulted in error.\n");
         close(*clientSocket);
         free(httpRequest);
-        exit(1);
+        exit(EXIT_CODE_1);
     }
     // " inspired by: Rysavy Ondrej - DemoTcp/client.c
 
@@ -672,16 +689,20 @@ void initiateCommunication(const int *clientSocket, struct sockaddr_in serverAdd
         exit(EXIT_CODE_1);
     }
 
+    // auxiliary vars for response printing
     char* tmpHeader = (char*) malloc(sizeof(char) * 1);
     tmpHeader[0] = '\0';
     char* tmpBody = (char*) malloc(sizeof(char) * 1);
     tmpBody[0] = '\0';
+
+    // parse response
     parseResponse(response, &tmpHeader, &tmpBody);
 
     // print header (without blank line) and content
     fprintf(stderr, "%s\n", tmpHeader);
     fprintf(stdout, "%s\n", tmpBody);
 
+    // free auxiliary vars
     free(tmpHeader);
     free(tmpBody);
     free(httpRequest);
@@ -722,13 +743,13 @@ int parseResponse(char* response, char** header, char** body) {
 
     // parse header
     int responseCode = 0;
-    int contentLenght = 0;
-    int parseResult = parseHeader(tmpHeader, &responseCode, &contentLenght);
+    int contentLength = 0;
+    int parseResult = parseHeader(tmpHeader, &responseCode, &contentLength);
 
     // get content
     int contentLen = (int) (strlen(response) - strlen(tmpHeader) - 2);   // content is located behind blank line; \r\n
     if (contentLen > 0) {
-        if (contentLen != contentLenght) {  // compare length of body and Content-Length parameter
+        if (contentLen != contentLength) {  // compare length of body and Content-Length parameter
             fprintf(stderr, "Content-Length and length of HTTP message body have different length");
             parseResult = 0;
         } else {
@@ -808,6 +829,7 @@ int parseHeader(char* request, int* responseCode, int* contentLength) {
     long code = strtol(tmpStatusCode, NULL, 10);
     *responseCode = (int) code;
 
+    // free auxiliary vars
     free(tmpReasonPhrase);
     free(tmpProtocolVersion);
     free(tmpStatusCode);

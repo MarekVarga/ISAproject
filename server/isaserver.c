@@ -274,6 +274,7 @@ struct HttpHeader* createHttpHeader() {
         return NULL;
     }
 
+    // method
     header->method = (char*) malloc(sizeof(char) * 1);
     if (header->method == NULL) {
         header->method = NULL;
@@ -281,6 +282,7 @@ struct HttpHeader* createHttpHeader() {
         header->method[0] = '\0';
     }
 
+    // URL
     header->url = (char*) malloc(sizeof(char) * 1);
     if (header->url == NULL) {
         header->url = NULL;
@@ -288,6 +290,7 @@ struct HttpHeader* createHttpHeader() {
         header->url[0] = '\0';
     }
 
+    // host
     header->host = (char*) malloc(sizeof(char) * 1);
     if (header->host == NULL) {
         header->host = NULL;
@@ -295,6 +298,7 @@ struct HttpHeader* createHttpHeader() {
         header->host[0] = '\0';
     }
 
+    // Content-Length
     header->contentLength = 0;
 
     return header;
@@ -367,15 +371,9 @@ void establishConnection(int portNumber, struct sockaddr_in* serverAddress) {
  */
 void satisfyClient(const int* clientSocketDescriptor) {
     char request[BUFSIZ];
-    char login[BUFSIZ];
     char response[BUFSIZ];
-    char confirmationMessage[BUFSIZ];
-    char tmp[BUFSIZ];
     bzero(request,BUFSIZ);
-    bzero(login, BUFSIZ);
     bzero(response, BUFSIZ);
-    bzero(confirmationMessage, BUFSIZ);
-    bzero(tmp, BUFSIZ);
     char* header = (char*) malloc(sizeof(char) * 1);
     header[0] = '\0';
     char* content = (char*) malloc(sizeof(char) * 1);
@@ -409,6 +407,7 @@ void satisfyClient(const int* clientSocketDescriptor) {
         exit(EXIT_CODE_1);
     }
 
+    // free vars
     deleteHttpHeader(httpHeader);
     free(serverResponse);
     free(header);
@@ -477,6 +476,7 @@ int parseRequest(char* request, struct HttpHeader* header, char** content, char*
         }
     }
 
+    // free auxiliary vars
     free(tmpHeader);
     free(method);
     free(url);
@@ -547,6 +547,7 @@ int parseHeader(char* header, char** method, char** url, int* contentLength, cha
         }
     }
 
+    // free auxiliary vars
     free(tmpMethod);
     free(tmpUrl);
     free(tmpProtocolVersion);
@@ -645,7 +646,9 @@ int processRequest(struct HttpHeader* httpHeader, char* content, char** response
         responseCode = RESPONSE_CODE_404;
     }
 
+    // free boardName var
     free(boardName);
+
     return responseCode;
 }
 
@@ -668,6 +671,7 @@ void parseBoardNameFromUrl(char* url, char** boardName, int boardNameLen, int of
     *boardName = realloc(*boardName, sizeof(char) * (strlen(tmpBoardName) + 1));
     strcpy(*boardName, tmpBoardName);
 
+    // free auxiliary var
     free(tmpBoardName);
 }
 
@@ -726,6 +730,7 @@ int parseBoardNameAndIdFromUrl(char *url, char **boardName, int *id, int boardNa
     long longId = strtol(tmpId, NULL, 10);
     *id = (int) longId;
 
+    // free auxiliary vars
     free(tmpBoardName);
     free(tmp);
     free(tmpName);
@@ -771,8 +776,10 @@ int apiGetBoards(char** response) {
     *response = realloc(*response, sizeof(char) * (strlen(tmpContent) + 1));
     strcpy(*response, tmpContent);
 
+    // free auxiliary vars
     free(tmp);
     free(tmpContent);
+
     return RESPONSE_CODE_200;
 }
 
@@ -792,6 +799,7 @@ int apiCreateNewBoard(char* boardName, char** response) {
         return RESPONSE_CODE_409;
     }
 
+    // create new empty board
     struct Board* newBoard = createBoard(boardName);
     if (newBoard == NULL) {
         *response = realloc(*response, sizeof(char) * (strlen("Malloc error on board creation") + 1));
@@ -932,8 +940,10 @@ int fillResponseWithBoardContent(struct BoardContent *boardContent, char* boardN
     *response = realloc(*response, sizeof(char) * (strlen(tmpResponse) + 1));
     strcpy(*response, tmpResponse);
 
+    // free auxiliary vars
     free(tmp);
     free(tmpResponse);
+
     return RESPONSE_CODE_200;
 }
 
@@ -1125,6 +1135,16 @@ int deleteBoardContentForId(struct BoardContent **boardContent, int id, char **r
     return RESPONSE_CODE_200;
 }
 
+/**
+ * Function replaces board's content located at <id> with the new <content>.
+ *
+ * @param boardContent struct BoardContent* boardContent
+ * @param id int board's identificator
+ * @param content char* new content of the board
+ * @param response pointer to char* that will be contain error message if some occurs
+ *
+ * @return 200 on successful deletion of content, other 404 if some error occurred
+ */
 int putContentToBoardContent(struct BoardContent *boardContent, int id, char *content, char **response) {
     if (boardContent == NULL) {
         *response = realloc(*response, sizeof(char) * (strlen("No such board content exists") + 1));
@@ -1184,6 +1204,8 @@ void prepareHttpResponse(int responseCode, char* serverResponse, char** httpResp
 
     *httpResponse = realloc(*httpResponse, sizeof(char) * (strlen(tmpResponse) + 1));
     strcpy(*httpResponse, tmpResponse);
+
+    // free auxiliary vars
     free(tmpResponse);
     free(httpHeader);
 }
