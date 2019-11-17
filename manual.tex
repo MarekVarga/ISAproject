@@ -13,6 +13,7 @@
 	\usepackage{caption}
 	\usepackage{natbib}
 	\usepackage{url}
+	\usepackage{parselines}
 	\DeclareUrlCommand\url{\def\UrlLeft{<}\def\UrlRight{>} \urlstyle{tt}}
 	\addto\captionsczech{% Replace "english" with the language you use
   		\renewcommand{\contentsname}{Content}
@@ -96,7 +97,7 @@
 	\textit{HTTP/1.1 200 OK \\ }
 	\end{center}
 	\section{Implementation specifications}
-	This section provides some details of my implementation. 
+	This section provides some details of my implementation. This project was implemented in C language.
 	\subsection{Communication}
 	\uv{HTTP communication usually takes place over TCP/IP connections.} \cite{Fiel:rfc2616} Therefore the client-server communication is done through TCP. There are a few steps int TCP 		communication. First a socket needs to be created with \textit{socket()} function. Then the socket needs to be assigned port number and transport address via call to the 		\textit{bind()} function. Then server waits for incoming connection by calling \textit{listen()} and all pending connections will be queued up until server satisfies 		their demand. By calling \textit{accept()} function, server takes the first pending connenction from the queue. The number of pending connections is set to ten.
 	After server takes the first pending connection it calls \textit{read()} function to obtain the message from client and then calls \textit{write()} to send a message to client.
@@ -121,67 +122,88 @@
 	Function \textit{exit()} is a call to normal process termination and therefore \textit{atExitFunction} is called, which disposes all the boards, frees allocated memory and
 	 closes socket descriptor. I did not think of a better way to free all allocated memory that this.
 	\subsection{Further restrictions}
-	How to run server and client is written in the \textit{Usage} section. However port number must be greater than 1024 because lower ports are system reserved. \\
+	How the server and the client parts are run is written in the \textit{Usage} section. However port number must be greater than 1024 because lower ports are system reserved. \\
+	Name of the board must be in alpha numeric characters otherwise client results in an error and server does not allow a new board to be created for such name. \\	
+	In theory HTTP message parsing is done the following way:
+	\begin{enumerate}
+		\item Read status line
+		\item Read header fields
+		\item Determine message body length, if present
+		\item Read message body until the required amount of octets is read or connection is closed
+	\end{enumerate}
+	This is accordint to \cite{Fiel:rfc7230}. However, this implementation does not support this parsing since it was not required. Only N amounts of bytes are read 		into the buffer from socket, where the number N depends on the system and compiler. This is because the buffer is initialized to the size of \textit{BUFSIZ}, 		which is a macro from \textit{stdio.h} library. Unfortunately, it is possible that this implemention can lead to the loss of data transmitted. \\
 	The example run was run with valgrind and no memory leaks or errors were found.
 		
 	\newpage		
 	\section{Usage}
-	The server part needs to be running when the client sends a request. The server program is called \textit{isaserver} and the client program is called \textit{isaclient}. Both 		programs take \textit{-h} command line argument to display info about usage. The server takes \textit{-p $<portnumber>$} command line argument which specifies the port number. 	The client takes \textit{-H $<hostname>$ -p $<portnumber>$ $<command>$} command line arguments where hostname is address of the server, portnumber is portnumber on which the 		server is running and command is one of the following: \textit{boards}, \textit{board add $<name>$}, \textit{board delete $<name>$}, \textit{board list}, \textit{item add 		$<name> <content>$}, \textit{item delete $<name> <id>$}, \textit{item update $<name> <id>$}.
+	The server part needs to be running when the client sends a request. The server program is called \textit{isaserver} and the client program is called \textit{isaclient}. Both 		programs take \textit{-h} command line argument to display info about usage. The server takes \textit{-p $<$portnumber$>$} command line argument which specifies the port number. 	The client takes \textit{-H $<$hostname$>$ -p $<$portnumber$>$ $<$command$>$} command line arguments where hostname is address of the server, portnumber is portnumber on which the 		server is running and command is one of the following: \textit{boards}, \textit{board add $<$name$>$}, \textit{board delete $<$name$>$}, \textit{board list}, \textit{item add 		$<$name$>$ $<$content$>$}, \textit{item delete $<$name$>$ $<$id$>$}, \textit{item update $<$name$>$ $<$id$>$}.
 	\subsection{Example run}
-	Run server from the command line: \textit{./isaserver -p 2019} \\
-	Now run client with various <command> arguments and watch output \\
-	Run client from the command line: \textit{./isaclient -H localhost -p 2019 board add nastenka1} to create new board with name \textit{nastenka1} \\
-	Output: \\
+	\begin{parse lines}[\noindent]{#1\\}
+	Run server from the command line: \textit{./isaserver -p 2019}
+	Now run client with various $<$command$>$ arguments and watch output
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 board add nastenka1} to create new board with name \textit{nastenka1}
+	Output:
 	\textit{HTTP/1.1 201 CREATED \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 board add nastenka2} to create new board with name \textit{nastenka2} \\
-	Output: \\
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 board add nastenka2} to create new board with name \textit{nastenka2}
+	Output:
 	\textit{HTTP/1.1 201 CREATED \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka2 prispevok1} to add content \textit{prispevok1} to board 		\textit{nastenka2} \\
-	Output: \\
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka2 prispevok1} to add content \textit{prispevok1} to board 		\textit{nastenka2}
+	Output:
 	\textit{HTTP/1.1 201 CREATED \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka1 prispevok1} to add content \textit{prispevok1} to board 		\textit{nastenka1} \\
-	Output: \\
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka1 prispevok1} to add content \textit{prispevok1} to board 		\textit{nastenka1}
+	Output:
 	\textit{HTTP/1.1 201 CREATED \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka prispevok1} to add content \textit{prispevok1} to board 		\textit{nastenka} \\\\
-	Output: \\
-	\textit{HTTP/1.1 404 NOT FOUND \\ Content-Type: text/plain \\ Content-Length: 19 \\ \\ No such board exists \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 boards} to display all boards \\
-	Output: \\
-	\textit{HTTP/1.1 200 OK \\ Content-Type: text/plain \\ Content-Length: 20 \\ \\ nastenka1 \\ nastenka2 \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka2 prispevok2} to add content \textit{prispevok2} to board 		\textit{nastenka2} \\
-	Output: \\
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka prispevok1} to add content \textit{prispevok1} to board 		\textit{nastenka}
+	Output:
+	\textit{HTTP/1.1 404 NOT FOUND \\ Content-Type:text/plain \\ Content-Length: 20 \\ \\ No such board exists \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 boards} to display all boards
+	Output:
+	\textit{HTTP/1.1 200 OK \\ Content-Type:text/plain \\ Content-Length: 20 \\ \\ nastenka1 \\ nastenka2 \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka2 prispevok2} to add content \textit{prispevok2} to board 			\textit{nastenka2}
+	Output:
 	\textit{HTTP/1.1 201 CREATED \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 board list nastenka2} to display all content of board \textit{nastenka2} \\
-	Output: \\
-	\textit{HTTP/1.1 200 OK \\ Content-Type: text/plain \\ Content-Length: 42 \\ \\ nastenka2 \\ 1. prispevok1. \\ 2. prispevok2. \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 board delete nastenka1} to delete board with name \textit{nastenka1} \\
-	Output: \\
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 board list nastenka2} to display all content of board \textit{nastenka2}
+	Output:
+	\textit{HTTP/1.1 200 OK \\ Content-Type:text/plain \\ Content-Length: 42 \\ \\ nastenka2 \\ 1. prispevok1. \\ 2. prispevok2. \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 board delete nastenka1} to delete board with name \textit{nastenka1}
+	Output:
 	\textit{HTTP/1.1 200 OK \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 boards} to display all boards \\
-	Output: \\
-	\textit{HTTP/1.1 200 OK \\ Content-Type: text/plain \\ Content-Length: 10 \\ \\ nastenka2 \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 item update nastenka2 2 novy prispevok2} to update content located at position \textit{2} at board with name \textit{nastenka2} with content \textit{novy prispevok2}\\
-	Output: \\
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 boards} to display all boards
+	Output:
+	\textit{HTTP/1.1 200 OK \\ Content-Type:text/plain \\ Content-Length: 10 \\ \\ nastenka2 \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka2 "novy \textbackslash n viacriadkovy prispevok"} to add new multiline content to board \textit{nastenka2}
+	Output:
+	\textit{HTTP/1.1 201 CREATED \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 item update nastenka2 2 novy prispevok2} to update content located at position \textit{2} at board with name \textit{nastenka2} with content \textit{novy prispevok2}
+	Output:
 	\textit{HTTP/1.1 200 OK \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 board list nastenka2} to display all content of board \textit{nastenka2} \\
-	Output: \\
-	\textit{HTTP/1.1 200 OK \\ Content-Type: text/plain \\ Content-Length: 47 \\ \\ nastenka2 \\ 1. prispevok1. \\ 2. novy prispevok2. \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 item delete nastenka2 2} to delete content located at position \textit{2} at board with name \textit{nastenka2} \\
-	Output: \\
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 board list nastenka2} to display all content of board \textit{nastenka2}
+	Output:
+	\textit{HTTP/1.1 200 OK \\ Content-Type:text/plain \\ Content-Length: 79 \\ \\ nastenka2 \\ 1. prispevok1. \\ 2. novy prispevok2. \\ 3. novy viacriadkovy \\  prispevok. \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 item delete nastenka2 2} to delete content located at position \textit{2} at board with name \textit{nastenka2}
+	Output:
 	\textit{HTTP/1.1 200 OK \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 board list nastenka2} to display all content of board \textit{nastenka2} \\
-	Output: \\
-	\textit{HTTP/1.1 200 OK \\ Content-Type: text/plain \\ Content-Length: 26 \\ \\ nastenka2 \\ 1. prispevok1. \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 board add nastenka2} to create new board with name \textit{nastenka2} \\
-	Output: \\
-	\textit{HTTP/1.1 409 CONFLICT \\ Content-Type: text/plain \\ Content-Length: 19 \\ \\ Board already exists \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 item delete nastenka2 2} to delete content located at position \textit{2} at board with name \textit{nastenka2} \\
-	Output: \\
-	\textit{HTTP/1.1 404 NOT FOUND \\ Content-Type: text/plain \\ Content-Length: 28 \\ \\ No such board content exists \\}
-	\\Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka2 } to add empty content to board with name \textit{nastenka2} \\
-	Output: \\
-	\textit{HTTP/1.1 400 BAD REQUEST \\ Content-Type: text/plain \\ Content-Length: 45 \\ \\ Content-Length of POST request cannot be zero \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 board list nastenka2} to display all content of board \textit{nastenka2}
+	Output:
+	\textit{HTTP/1.1 200 OK \\ Content-Type:text/plain \\ Content-Length: 59 \\ \\ nastenka2 \\ 1. prispevok1. \\ 2. novy viacriadkovy \\  prispevok. \\ }
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 board add nastenka2} to create new board with name \textit{nastenka2}
+	Output:
+	\textit{HTTP/1.1 409 CONFLICT \\ Content-Type:text/plain \\ Content-Length: 20 \\ \\ Board already exists \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 item delete nastenka2 3} to delete content located at position \textit{3} at board with name \textit{nastenka2}
+	Output:
+	\textit{HTTP/1.1 404 NOT FOUND \\ Content-Type:text/plain \\ Content-Length: 28 \\ \\ No such board content exists \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka2 } to add empty content to board with name \textit{nastenka2}
+	Output:
+	\textit{HTTP/1.1 400 BAD REQUEST \\ Content-Type:text/plain \\ Content-Length: 45 \\ \\ Content-Length of POST request cannot be zero \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 item add nastenka2 ""} to add empty content to board with name \textit{nastenka2}
+	Output:
+	\textit{HTTP/1.1 400 BAD REQUEST \\ Content-Type:text/plain \\ Content-Length: 45 \\ \\ Content-Length of POST request cannot be zero \\}
+	Run client from the command line: \textit{./isaclient -H localhost -p 2019 board add na\#tenka} to add board with non alpha numeric name \textit{na\#tenka}
+	Output:
+	\textit{$<$name$>$ argument can only contain alpha numeric chars; try running with "-h" argument for more info.}
 	
+	\end{parse lines}
+
 	\newpage
 	\section{Sources}	
 	\bibliographystyle{csplainnat}
